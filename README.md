@@ -181,6 +181,7 @@ For more information about the supported formats, see:
 | [Ultralytics YOLO Segmentation](https://docs.ultralytics.com/datasets/segment/)                  | ✔️     | ✔️     |
 | [Ultralytics YOLO Pose](https://docs.ultralytics.com/datasets/pose/)                             | ✔️     | ✔️     |
 | [Ultralytics YOLO Classification](https://docs.ultralytics.com/datasets/classify/)               | ✔️     | ✔️     |
+| [X-AnyLabeling](https://github.com/CVHub520/X-AnyLabeling/tree/main)                             | ✔️     | ✔️     |
 
 <!--lint enable maximum-line-length-->
 
