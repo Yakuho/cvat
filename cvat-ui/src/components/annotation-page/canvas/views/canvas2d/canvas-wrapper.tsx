@@ -24,6 +24,7 @@ import { Canvas3d } from 'cvat-canvas3d-wrapper';
 import {
     AnnotationConflict, ObjectState, ObjectType, ShapeType, QualityConflict, getCore,
 } from 'cvat-core-wrapper';
+import { scrollAndExpandState } from 'utils/objects-sidebar';
 import config from 'config';
 import CVATTooltip from 'components/common/cvat-tooltip';
 import FrameTags from 'components/annotation-page/tag-annotation-workspace/frame-tags';
@@ -111,6 +112,7 @@ interface StateToProps {
     maxZLayer: number;
     curZLayer: number;
     automaticBordering: boolean;
+    pointSnap: boolean;
     adaptiveZoom: boolean;
     intelligentPolygonCrop: boolean;
     switchableAutomaticBordering: boolean;
@@ -133,7 +135,7 @@ interface DispatchToProps {
     onMergeAnnotations(states: ObjectState[]): void;
     onSplitAnnotations(state: ObjectState): void;
     onGroupAnnotations(states: ObjectState[]): void;
-    onJoinAnnotations(states: ObjectState[], points: number[]): void;
+    onJoinAnnotations(states: ObjectState[], points: number[][]): void;
     onSliceAnnotations(state: ObjectState, results: number[][]): void;
     onActivateObject: (activatedStateID: number | null, activatedElementID: number | null) => void;
     onExpandObject(objectState: ObjectState): void;
@@ -193,6 +195,7 @@ function mapStateToProps(state: CombinedState): StateToProps {
                 showAllInterpolationTracks,
                 showTagsOnFrame,
                 automaticBordering,
+                pointSnap,
                 adaptiveZoom,
                 intelligentPolygonCrop,
                 textFontSize,
@@ -250,6 +253,7 @@ function mapStateToProps(state: CombinedState): StateToProps {
         minZLayer,
         maxZLayer,
         automaticBordering,
+        pointSnap,
         adaptiveZoom,
         intelligentPolygonCrop,
         workspace,
@@ -314,7 +318,7 @@ function mapDispatchToProps(dispatch: any): DispatchToProps {
         onGroupAnnotations(states: ObjectState[]): void {
             dispatch(groupAnnotationsAsync(states));
         },
-        onJoinAnnotations(states: ObjectState[], points: number[]): void {
+        onJoinAnnotations(states: ObjectState[], points: number[][]): void {
             dispatch(joinAnnotationsAsync(states, points));
         },
         onSliceAnnotations(state: ObjectState, results: number[][]): void {
@@ -387,6 +391,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
     public componentDidMount(): void {
         const {
             automaticBordering,
+            pointSnap,
             adaptiveZoom,
             intelligentPolygonCrop,
             showObjectsTextAlways,
@@ -416,6 +421,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
             undefinedAttrValue: config.UNDEFINED_ATTRIBUTE_VALUE,
             displayAllText: showObjectsTextAlways,
             autoborders: automaticBordering,
+            pointSnap,
             adaptiveZoom,
             showProjections,
             showConflicts: showGroundTruth,
@@ -465,6 +471,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
             textContent,
             showAllInterpolationTracks,
             automaticBordering,
+            pointSnap,
             adaptiveZoom,
             intelligentPolygonCrop,
             showProjections,
@@ -480,6 +487,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
         if (
             prevProps.showObjectsTextAlways !== showObjectsTextAlways ||
             prevProps.automaticBordering !== automaticBordering ||
+            prevProps.pointSnap !== pointSnap ||
             prevProps.adaptiveZoom !== adaptiveZoom ||
             prevProps.showProjections !== showProjections ||
             prevProps.intelligentPolygonCrop !== intelligentPolygonCrop ||
@@ -501,6 +509,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
                 undefinedAttrValue: config.UNDEFINED_ATTRIBUTE_VALUE,
                 displayAllText: showObjectsTextAlways,
                 autoborders: automaticBordering,
+                pointSnap,
                 adaptiveZoom,
                 showProjections,
                 intelligentPolygonCrop,
@@ -635,6 +644,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
         canvasInstance.html().removeEventListener('canvas.splitted', this.onCanvasTrackSplitted);
 
         canvasInstance.html().removeEventListener('canvas.error', this.onCanvasErrorOccurrence);
+        canvasInstance.html().removeEventListener('canvas.warning', this.onCanvasWarningOccurrence);
         canvasInstance.html().removeEventListener('canvas.message', this.onCanvasMessage as EventListener);
     }
 
@@ -647,6 +657,16 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
             const { onCanvasErrorOccurred } = this.props;
             onCanvasErrorOccurred(exception);
         }
+    };
+
+    private onCanvasWarningOccurrence = (event: any): void => {
+        const { message, domain } = event.detail;
+        notification.warning({
+            message: domain ? `${domain}` : 'Warning',
+            description: message,
+            duration: 5,
+            className: 'cvat-notification-warning-canvas',
+        });
     };
 
     private onCanvasMessage = (event: CustomEvent<{ messages: CanvasHint[] | null, topic: string }>): void => {
@@ -737,7 +757,9 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
             duration,
             count: states.length,
         });
-        onJoinAnnotations(states, points);
+
+        const pointsArray = points as number[][];
+        onJoinAnnotations(states, pointsArray);
     };
 
     private onCanvasTrackSplitted = (event: any): void => {
@@ -808,18 +830,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
 
     private onCanvasShapeClicked = (e: any): void => {
         const { onExpandObject } = this.props;
-        const { clientID, parentID } = e.detail.state;
-        let sidebarItem = null;
-        if (Number.isInteger(parentID)) {
-            sidebarItem = window.document.getElementById(`cvat-objects-sidebar-state-item-element-${clientID}`);
-        } else {
-            sidebarItem = window.document.getElementById(`cvat-objects-sidebar-state-item-${clientID}`);
-        }
-
-        if (sidebarItem) {
-            sidebarItem.scrollIntoView();
-        }
-        onExpandObject(e.detail.state);
+        scrollAndExpandState(e.detail.state, onExpandObject);
     };
 
     private onCanvasShapeDeactivated = (e: any): void => {
@@ -1102,6 +1113,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
         canvasInstance.html().addEventListener('canvas.splitted', this.onCanvasTrackSplitted);
 
         canvasInstance.html().addEventListener('canvas.error', this.onCanvasErrorOccurrence);
+        canvasInstance.html().addEventListener('canvas.warning', this.onCanvasWarningOccurrence);
         canvasInstance.html().addEventListener('canvas.message', this.onCanvasMessage as EventListener);
     }
 
@@ -1150,13 +1162,7 @@ class CanvasWrapperComponent extends React.PureComponent<Props> {
                     if (nextState.objectType !== ObjectType.TAG && canvasInstance) {
                         canvasInstance.focus(nextState.clientID, focusedObjectPadding);
                     }
-                    const sidebarItem = window.document.getElementById(
-                        `cvat-objects-sidebar-state-item-${nextState.clientID}`,
-                    );
-                    if (sidebarItem) {
-                        sidebarItem.scrollIntoView();
-                    }
-                    onExpandObject(nextState);
+                    scrollAndExpandState(nextState, onExpandObject);
                 }
             }
         };
