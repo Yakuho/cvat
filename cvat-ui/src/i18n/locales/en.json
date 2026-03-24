@@ -1,0 +1,31 @@
+{
+    "components": {
+        "header" : {
+            "header": {
+                "projects": "Projects",
+                "tasks": "Tasks",
+                "jobs": "Jobs",
+                "cloud_storages": "Cloud Storages",
+                "requests": "Requests",
+                "models": "Models",
+                "analytics": "Analytics"
+            },
+            "menu": {
+                "admin_page": "Admin page",
+                "profile": "Profile",
+                "language": "Language",
+                "organization": "Organization",
+                "organization_child": {
+                    "open_organization": "Settings",
+                    "invitations": "Invitations",
+                    "create_organization": "Create",
+                    "switch_organization": "Switch organization",
+                    "personal": "Personal workspace"
+                },
+                "settings": "Settings",
+                "about": "About",
+                "logout": "Logout"
+            }
+        }
+    }
+}

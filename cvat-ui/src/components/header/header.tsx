@@ -5,6 +5,7 @@
 
 import './styles.scss';
 import React, { useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { connect } from 'react-redux';
 import { useHistory, useLocation } from 'react-router';
 import { Row, Col } from 'antd/lib/grid';
@@ -14,6 +15,7 @@ import {
     InfoCircleOutlined,
     LoadingOutlined,
     LogoutOutlined,
+    GlobalOutlined,
     GithubOutlined,
     QuestionCircleOutlined,
     CaretDownOutlined,
@@ -178,6 +180,10 @@ function HeaderComponent(props: Props): JSX.Element {
     } = props;
 
     const {
+        t, i18n,
+    } = useTranslation();
+
+    const {
         CHANGELOG_URL, LICENSE_URL, GITHUB_URL, GUIDE_URL, DISCORD_URL,
     } = config;
 
@@ -291,6 +297,11 @@ function HeaderComponent(props: Props): JSX.Element {
         }
     };
 
+    const changeLanguage = async (lng: string): Promise<void> => {
+        localStorage.setItem('cvat-lang', lng);
+        await i18n.changeLanguage(lng);
+    };
+
     const plugins = usePlugins((state: CombinedState) => state.plugins.components.header.userMenu.items, props);
 
     const menuItems: [NonNullable<MenuProps['items']>[0], number][] = [];
@@ -301,7 +312,7 @@ function HeaderComponent(props: Props): JSX.Element {
             onClick: (): void => {
                 window.open('/admin', '_blank');
             },
-            label: 'Admin page',
+            label: t('components.header.menu.admin_page'),
         }, 0]);
     }
 
@@ -311,39 +322,55 @@ function HeaderComponent(props: Props): JSX.Element {
         onClick: (): void => {
             history.push('/profile');
         },
-        label: 'Profile',
+        label: t('components.header.menu.profile'),
     }, 10]);
+
+    const supportedLngs = i18n.options.resources ?
+        Object.keys(i18n.options.resources) :
+        ['en'];
+
+    menuItems.push([{
+        key: 'language',
+        icon: <GlobalOutlined />,
+        label: t('components.header.menu.language'),
+        children: supportedLngs.map((lng) => ({
+            key: `lang-${lng}`,
+            label: lng.toLowerCase(),
+            className: 'cvat-header-menu-language-item',
+            onClick: () => changeLanguage(lng),
+        })),
+    }, 20]);
 
     const viewType: 'menu' | 'list' = (organizationsList?.length || 0) > 5 ? 'list' : 'menu';
 
     menuItems.push([{
         key: 'organization',
         icon: organizationFetching || organizationsListFetching ? <LoadingOutlined /> : <TeamOutlined />,
-        label: 'Organization',
+        label: t('components.header.menu.organization'),
         disabled: organizationFetching || organizationsListFetching,
         children: [
             ...(currentOrganization ? [{
                 key: 'open_organization',
                 icon: <SettingOutlined />,
-                label: 'Settings',
+                label: t('components.header.menu.organization_child.settings'),
                 className: 'cvat-header-menu-open-organization',
                 onClick: () => history.push('/organization'),
             }] : []), {
                 key: 'invitations',
                 icon: <MailOutlined />,
-                label: 'Invitations',
+                label: t('components.header.menu.organization_child.invitations'),
                 className: 'cvat-header-menu-organization-invitations-item',
                 onClick: () => history.push('/invitations'),
             }, {
                 key: 'create_organization',
                 icon: <PlusOutlined />,
-                label: 'Create',
+                label: t('components.header.menu.organization_child.create_organization'),
                 className: 'cvat-header-menu-create-organization',
                 onClick: () => history.push('/organizations/create'),
             },
             ...(!!organizationsList && viewType === 'list' ? [{
                 key: 'switch_organization',
-                label: 'Switch organization',
+                label: t('components.header.menu.organization_child.switch_organization'),
                 onClick: () => {
                     openSelectOrganizationModal(setNewOrganization);
                 },
@@ -352,7 +379,7 @@ function HeaderComponent(props: Props): JSX.Element {
                 type: 'divider' as const,
             }, {
                 key: '$personal',
-                label: 'Personal workspace',
+                label: t('components.header.menu.organization_child.personal'),
                 className: !currentOrganization ? 'cvat-header-menu-active-organization-item' : 'cvat-header-menu-organization-item',
                 onClick: resetOrganization,
             }, ...organizationsList.map((organization: Organization) => ({
@@ -369,21 +396,21 @@ function HeaderComponent(props: Props): JSX.Element {
         icon: <SettingOutlined />,
         onClick: () => switchSettingsModalVisible(true),
         title: `Press ${switchSettingsShortcut} to switch`,
-        label: 'Settings',
+        label: t('components.header.menu.settings'),
     }, 30]);
 
     menuItems.push([{
         key: 'about',
         icon: <InfoCircleOutlined />,
         onClick: () => showAboutModal(),
-        label: 'About',
+        label: t('components.header.menu.about'),
     }, 40]);
 
     menuItems.push([{
         key: 'logout',
         icon: logoutFetching ? <LoadingOutlined /> : <LogoutOutlined />,
         onClick: () => history.push('/auth/logout'),
-        label: 'Logout',
+        label: t('components.header.menu.logout'),
         disabled: logoutFetching,
     }, 50]);
 
@@ -414,7 +441,7 @@ function HeaderComponent(props: Props): JSX.Element {
                         history.push('/projects');
                     }}
                 >
-                    Projects
+                    {t('components.header.header.projects')}
                 </Button>
                 <Button
                     className={getButtonClassName('tasks')}
@@ -426,7 +453,7 @@ function HeaderComponent(props: Props): JSX.Element {
                         history.push('/tasks');
                     }}
                 >
-                    Tasks
+                    {t('components.header.header.tasks')}
                 </Button>
                 <Button
                     className={getButtonClassName('jobs')}
@@ -438,7 +465,7 @@ function HeaderComponent(props: Props): JSX.Element {
                         history.push('/jobs');
                     }}
                 >
-                    Jobs
+                    {t('components.header.header.jobs')}
                 </Button>
                 <Button
                     className={getButtonClassName('cloudstorages')}
@@ -450,7 +477,7 @@ function HeaderComponent(props: Props): JSX.Element {
                         history.push('/cloudstorages');
                     }}
                 >
-                    Cloud Storages
+                    {t('components.header.header.cloud_storages')}
                 </Button>
                 <Button
                     className={getButtonClassName('requests')}
@@ -462,7 +489,7 @@ function HeaderComponent(props: Props): JSX.Element {
                         history.push('/requests');
                     }}
                 >
-                    Requests
+                    {t('components.header.header.requests')}
                 </Button>
                 {isModelsPluginActive ? (
                     <Button
@@ -475,7 +502,7 @@ function HeaderComponent(props: Props): JSX.Element {
                             history.push('/models');
                         }}
                     >
-                        Models
+                        {t('components.header.header.models')}
                     </Button>
                 ) : null}
                 {isAnalyticsPluginActive && user.hasAnalyticsAccess ? (
@@ -488,7 +515,7 @@ function HeaderComponent(props: Props): JSX.Element {
                             window.open('/analytics', '_blank');
                         }}
                     >
-                        Analytics
+                        {t('components.header.header.analytics')}
                     </Button>
                 ) : null}
             </div>

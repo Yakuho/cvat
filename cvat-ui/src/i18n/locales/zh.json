@@ -1,0 +1,31 @@
+{
+    "components": {
+        "header" : {
+            "header": {
+                "projects": "项目",
+                "tasks": "任务",
+                "jobs": "作业",
+                "cloud_storages": "云存储",
+                "requests": "请求",
+                "models": "模型",
+                "analytics": "分析"
+            },
+            "menu": {
+                "admin_page": "管理员页面",
+                "profile": "简介",
+                "language": "语言",
+                "organization": "组织",
+                "organization_child": {
+                    "open_organization": "设置",
+                    "invitations": "邀请",
+                    "create_organization": "新建",
+                    "switch_organization": "切换",
+                    "personal": "个人空间"
+                },
+                "settings": "设置",
+                "about": "关于",
+                "logout": "注销"
+            }
+        }
+    }
+}
