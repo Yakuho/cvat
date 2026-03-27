@@ -31,6 +31,7 @@ import {
 import { Canvas } from 'cvat-canvas-wrapper';
 import { fetchAnnotationsAsync } from 'actions/annotation-actions';
 import { clamp } from 'utils/math';
+import { FramesRangeSelector } from './components';
 
 const core = getCore();
 
@@ -278,6 +279,19 @@ function ActionParameterComponent(props: ActionParameterProps & { onChange: (val
         );
     }
 
+    if (type === ActionParameterType.FRAMESRANGESELECTOR) {
+        const [startFrame, stopFrame] = computedValues.map((val) => +val);
+        return (
+            <FramesRangeSelector
+                frameNumber={store.getState().annotation.player.frame.number}
+                startFrame={startFrame}
+                stopFrame={stopFrame}
+                value={value}
+                onChange={setValue}
+            />
+        );
+    }
+
     const [min, max, step] = computedValues.map((val) => +val);
     return (
         <InputNumber
@@ -315,10 +329,14 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
         progress, progressMessage, frameFrom, frameTo, actionParameters, modalVisible,
     } = useSelector((state: State) => ({ ...state }), shallowEqual);
 
-    const filteredActions = targetObjectState ? actions
-        .filter((_action) => _action.isApplicableForObject(targetObjectState)) : actions;
+    const filteredActions = targetObjectState ?
+        actions.filter((_action) => _action.isApplicableForObject(targetObjectState)) : // filter for object action
+        actions.filter((_action) => !_action.isApplicableForObjectOnly()); // filter for menu action
     const jobInstance = storage.getState().annotation.job.instance as Job;
     const currentFrameAction = activeAction instanceof BaseCollectionAction || targetObjectState !== null;
+    if (activeAction && !filteredActions.some((a) => a.name === activeAction.name)) {
+        dispatch(reducerActions.setActiveAnnotationsAction(filteredActions[0]));
+    }
 
     useEffect(() => {
         core.actions.list().then((list: BaseAction[]) => {

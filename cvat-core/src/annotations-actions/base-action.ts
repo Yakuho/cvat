@@ -10,6 +10,7 @@ export enum ActionParameterType {
     SELECT = 'select',
     NUMBER = 'number',
     CHECKBOX = 'checkbox',
+    FRAMESRANGESELECTOR = 'framesrangeselect',
 }
 
 // For SELECT values should be a list of possible options
@@ -30,6 +31,8 @@ export abstract class BaseAction {
 
     public abstract get name(): string;
     public abstract get parameters(): ActionParameters | null;
+
+    public isApplicableForObjectOnly(): boolean { return false; }
 }
 
 export function prepareActionParameters(declared: ActionParameters, defined: object): Record<string, string | number> {

@@ -60,3 +60,79 @@
         margin-right: $grid-unit-size;
     }
 }
+
+.cvat-frames-range-selector {
+    background: #f5f7fa;
+    padding: 16px;
+    border-radius: 12px;
+
+    &-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+
+    &-count {
+        background: #e6f0ff;
+        color: #1d39c4;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 8px;
+        margin-right: 8px;
+        font-size: 16px;
+    }
+
+    &-text {
+        color: #555;
+        font-size: 14px;
+    }
+
+    &-direction {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+
+        .label {
+            color: #666;
+            margin-right: 8px;
+        }
+
+        .direction-buttons {
+            display: flex;
+            flex: 1;
+            gap: 12px;
+
+            .ant-btn {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 8px;
+                padding: 0 16px;
+            }
+        }
+    }
+
+    &-range {
+        .label {
+            display: block;
+            margin-bottom: 8px;
+            color: #666;
+        }
+
+        .range-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+
+            .ant-slider {
+                flex: 1;
+            }
+
+            .ant-input-number {
+                width: 70px;
+            }
+        }
+    }
+}

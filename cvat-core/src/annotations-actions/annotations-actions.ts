@@ -15,6 +15,7 @@ import {
 
 import { RemoveFilteredShapes } from './remove-filtered-shapes';
 import { PropagateShapes } from './propagate-shapes';
+import { SAM2Tracker, SAM2TrackerObject } from './sam2-tracker';
 
 const registeredActions: BaseAction[] = [];
 
@@ -44,6 +45,8 @@ export async function unregisterAction(action: BaseAction): Promise<void> {
     }
 }
 
+registerAction(new SAM2Tracker());
+registerAction(new SAM2TrackerObject());
 registerAction(new RemoveFilteredShapes());
 registerAction(new PropagateShapes());
 
