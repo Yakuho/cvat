@@ -16,21 +16,21 @@ export function FramesRangeSelector({
     const [frameRange, setFrameRange] = useState<[number, number]>([startFrame, stopFrame]);
 
     const updateFrameRange = ([v1, v2]: number[]): void => {
-        let newRange: [number, number];
-        if (v1 < frameNumber && v2 < frameNumber) {
-            newRange = [Math.min(v1, v2), frameNumber];
-        } else if (v1 > frameNumber && v2 > frameNumber) {
-            newRange = [frameNumber, Math.max(v1, v2)];
-        } else if (v1 === v2) {
-            if (v1 === startFrame) {
-                newRange = [v1, frameNumber === startFrame ? startFrame + 1 : frameNumber];
-            } else if (v2 === stopFrame) {
-                newRange = [frameNumber === stopFrame ? stopFrame - 1 : frameNumber, v2];
-            } else newRange = [v1, v1 + 1];
-        } else {
-            newRange = [Math.min(v1, v2), Math.max(v1, v2)];
+        let lo = Math.min(v1, v2);
+        let hi = Math.max(v1, v2);
+
+        if (hi < frameNumber) hi = frameNumber;
+        if (lo > frameNumber) lo = frameNumber;
+
+        if (hi === lo) {
+            if (lo > startFrame) lo -= 1;
+            else hi += 1;
         }
 
+        lo = Math.max(lo, startFrame);
+        hi = Math.min(hi, stopFrame);
+
+        const newRange: [number, number] = [lo, hi];
         setFrameRange(newRange);
         onChange(`${newRange[0]}-${newRange[1]}`);
     };
@@ -42,7 +42,7 @@ export function FramesRangeSelector({
         }).filter((v): v is number => v !== null);
 
         if (parts.length === 2) {
-            setFrameRange([
+            updateFrameRange([
                 Math.max(Math.min(parts[0], parts[1]), startFrame),
                 Math.min(Math.max(parts[0], parts[1]), stopFrame),
             ]);
@@ -50,10 +50,12 @@ export function FramesRangeSelector({
     }, [value, startFrame, stopFrame]);
 
     const trackFrames = Math.abs(frameRange[1] - frameRange[0]);
+    const backwardInputMin = frameRange[1] === frameNumber ? 1 : 0;
+    const forwardInputMin = frameRange[0] === frameNumber ? 1 : 0;
     const backwardTrackAvailable = frameNumber > startFrame;
     const forwardTrackAvailable = frameNumber < stopFrame;
-    const backwardActive = frameRange[0] < frameNumber - (frameNumber === stopFrame ? 1 : 0);
-    const forwardActive = frameRange[1] > frameNumber + (frameNumber === startFrame ? 1 : 0);
+    const backwardActive = frameRange[0] < frameNumber;
+    const forwardActive = frameRange[1] > frameNumber;
 
     return (
         <div className='cvat-frames-range-selector'>
@@ -76,7 +78,14 @@ export function FramesRangeSelector({
                         disabled={!backwardTrackAvailable}
                         onClick={() => {
                             if (backwardActive) {
-                                updateFrameRange([frameNumber, frameRange[1]]);
+                                const isMinBackward = frameNumber - frameRange[0] === 1 &&
+                                    frameRange[1] === frameNumber;
+                                if (isMinBackward) {
+                                    updateFrameRange([startFrame, frameRange[1]]);
+                                } else {
+                                    const newLo = frameRange[1] === frameNumber ? frameNumber - 1 : frameNumber;
+                                    updateFrameRange([newLo, frameRange[1]]);
+                                }
                             } else {
                                 updateFrameRange([startFrame, frameRange[1]]);
                             }
@@ -92,7 +101,14 @@ export function FramesRangeSelector({
                         disabled={!forwardTrackAvailable}
                         onClick={() => {
                             if (forwardActive) {
-                                updateFrameRange([frameRange[0], frameNumber]);
+                                const isMinForward = frameRange[1] - frameNumber === 1 &&
+                                    frameRange[0] === frameNumber;
+                                if (isMinForward) {
+                                    updateFrameRange([frameRange[0], stopFrame]);
+                                } else {
+                                    const newHi = frameRange[0] === frameNumber ? frameNumber + 1 : frameNumber;
+                                    updateFrameRange([frameRange[0], newHi]);
+                                }
                             } else {
                                 updateFrameRange([frameRange[0], stopFrame]);
                             }
@@ -110,7 +126,7 @@ export function FramesRangeSelector({
                 <div className='range-wrapper'>
                     <InputNumber
                         size='middle'
-                        min={backwardTrackAvailable && frameRange[1] <= frameNumber ? 1 : 0}
+                        min={backwardInputMin}
                         max={frameNumber - startFrame}
                         value={frameNumber - frameRange[0]}
                         disabled={!backwardTrackAvailable}
@@ -131,7 +147,7 @@ export function FramesRangeSelector({
 
                     <InputNumber
                         size='middle'
-                        min={forwardTrackAvailable && frameRange[0] >= frameNumber ? 1 : 0}
+                        min={forwardInputMin}
                         max={stopFrame - frameNumber}
                         value={frameRange[1] - frameNumber}
                         disabled={!forwardTrackAvailable}
