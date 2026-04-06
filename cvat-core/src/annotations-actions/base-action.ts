@@ -33,6 +33,7 @@ export abstract class BaseAction {
     public abstract get parameters(): ActionParameters | null;
 
     public isApplicableForObjectOnly(): boolean { return false; }
+    public isRenderActionRunnerFrames(): boolean { return true; }
 }
 
 export function prepareActionParameters(declared: ActionParameters, defined: object): Record<string, string | number> {

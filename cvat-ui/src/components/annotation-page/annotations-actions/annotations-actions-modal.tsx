@@ -429,7 +429,7 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
                     </Row>
                 </Col>
 
-                {activeAction && !currentFrameAction ? (
+                {activeAction && !currentFrameAction && activeAction.isRenderActionRunnerFrames() ? (
                     <>
                         <Col span={24} className='cvat-action-runner-frames'>
                             <Row>
