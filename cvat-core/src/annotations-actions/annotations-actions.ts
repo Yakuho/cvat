@@ -12,6 +12,9 @@ import {
 import {
     BaseCollectionAction, run as runCollectionAction, call as callCollectionAction,
 } from './base-collection-action';
+import {
+    BaseSAMTrackAction, run as runSAMTrackAction, call as callSAMTrackAction,
+} from './base-sam-track-actions';
 
 import { RemoveFilteredShapes } from './remove-filtered-shapes';
 import { PropagateShapes } from './propagate-shapes';
@@ -85,6 +88,17 @@ export async function runAction(
         );
     }
 
+    if (action instanceof BaseSAMTrackAction) {
+        return runSAMTrackAction(
+            instance,
+            action,
+            actionParameters,
+            filters,
+            onProgress,
+            cancelled,
+        );
+    }
+
     return Promise.resolve();
 }
 
@@ -115,6 +129,17 @@ export async function callAction(
             action,
             actionParameters,
             frame,
+            states,
+            onProgress,
+            cancelled,
+        );
+    }
+
+    if (action instanceof BaseSAMTrackAction) {
+        return callSAMTrackAction(
+            instance,
+            action,
+            actionParameters,
             states,
             onProgress,
             cancelled,

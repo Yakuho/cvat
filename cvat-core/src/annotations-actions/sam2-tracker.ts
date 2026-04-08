@@ -2,15 +2,14 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { BaseCollectionAction, CollectionActionInput, CollectionActionOutput } from './base-collection-action';
+import { BaseSAMTrackAction, SAMTrackActionInput, SAMTrackActionOutput } from './base-sam-track-actions';
 import { ActionParameters, ActionParameterType } from './base-action';
 import { Job, Task } from '../session';
 import { ShapeType } from '../enums';
 import ObjectState from '../object-state';
 
-export class SAM2Tracker extends BaseCollectionAction {
-    private session: Job | Task | null;
-    private targetFramesRange: number[];
+export class SAM2Tracker extends BaseSAMTrackAction {
+    private session: Job | Task;
     private convertPolygonShapesToTracks: boolean;
 
     public async init(sessionInstance: Job | Task, parameters: Record<string, string | number>): Promise<void> {
@@ -21,7 +20,7 @@ export class SAM2Tracker extends BaseCollectionAction {
             const parsed = framesRangeString.split('-').map((v) => v.trim()).map(Number);
             if (parsed.length === 2 && parsed.every((n) => !Number.isNaN(n))) framesRange = parsed;
         }
-        this.targetFramesRange = framesRange ?? [sessionInstance.startFrame, sessionInstance.stopFrame];
+        [this.frameFrom, this.frameTo] = framesRange ?? [sessionInstance.startFrame, sessionInstance.stopFrame];
         this.convertPolygonShapesToTracks = parameters['Convert polygon shapes to tracks'] === 'true';
     }
 
@@ -29,30 +28,30 @@ export class SAM2Tracker extends BaseCollectionAction {
         // nothing to destroy
     }
 
-    public async run(input: CollectionActionInput): Promise<CollectionActionOutput> {
-        const { collection, frameData: { number } } = input;
+    public async run(input: SAMTrackActionInput): Promise<SAMTrackActionOutput> {
+        const { collection, onProgress, cancelled, frameData: { number, width, height } } = input;
 
         if (collection.shapes.length === 0 && collection.tracks.length === 0) {
             throw new Error('The current job must have at least one polygon or mask annotations');
         }
 
         // TODO: call model api to auto segment annotation
+        console.log('run action...');
 
         return {
-            created: { shapes: [], tags: [], tracks: [] },
-            deleted: { shapes: [], tags: [], tracks: [] },
+            created: { shapes: [], tracks: [] },
+            deleted: { shapes: [], tracks: [] },
         };
     }
 
     public applyFilter(
-        input: Pick<CollectionActionInput, 'collection' | 'frameData'>,
-    ): CollectionActionInput['collection'] {
+        input: Pick<SAMTrackActionInput, 'collection' | 'frameData'>,
+    ): SAMTrackActionInput['collection'] {
         const { collection } = input;
         const targetShapesType = [ShapeType.POLYGON, ShapeType.MASK];
         return {
             shapes: collection.shapes
                 .filter((shape) => targetShapesType.includes(shape.type)),
-            tags: [],
             tracks: collection.tracks
                 .filter((track) => targetShapesType.includes(track.shapes[0].type)),
         };
