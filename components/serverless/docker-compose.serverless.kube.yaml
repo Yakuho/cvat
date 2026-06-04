@@ -1,0 +1,31 @@
+x-nuclio-env: &nuclio-env
+  CVAT_NUCLIO_SCHEME: ${CVAT_NUCLIO_SCHEME:-http}
+  # NOTE: CVAT_NUCLIO_HOST Please set ENV CVAT_NUCLIO_HOST=$(minikube ip)
+  CVAT_NUCLIO_HOST: ${CVAT_NUCLIO_HOST:?Please set CVAT_NUCLIO_HOST}
+  CVAT_NUCLIO_PORT: ${CVAT_NUCLIO_PORT:-30070}
+  CVAT_NUCLIO_DEFAULT_TIMEOUT: ${CVAT_NUCLIO_DEFAULT_TIMEOUT:-120}
+  CVAT_NUCLIO_FUNCTION_NAMESPACE: ${CVAT_NUCLIO_FUNCTION_NAMESPACE:-cvat}
+  CVAT_NUCLIO_INVOKE_METHOD: dashboard
+
+services:
+  cvat_server:
+    environment:
+      <<: *nuclio-env
+      CVAT_SERVERLESS: 1
+    networks:
+      - minikube
+      - cvat
+    labels:
+      traefik.docker.network: cvat_cvat
+
+  cvat_worker_annotation:
+    environment:
+      <<: *nuclio-env
+      CVAT_SERVERLESS: 1
+    networks:
+      - minikube
+      - cvat
+
+networks:
+  minikube:
+    external: true

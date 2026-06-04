@@ -2,26 +2,29 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { SerializedCollection } from '../server-response-types';
 import { BaseSAMTrackAction, SAMTrackActionInput, SAMTrackActionOutput } from './base-sam-track-actions';
 import { ActionParameters, ActionParameterType } from './base-action';
 import { Job, Task } from '../session';
 import { ShapeType } from '../enums';
 import ObjectState from '../object-state';
+import serverProxy from "../server-proxy";
 
 export class SAM2Tracker extends BaseSAMTrackAction {
-    private session: Job | Task;
-    private convertPolygonShapesToTracks: boolean;
+    private session: Job;
+    private threshold: number;
 
-    public async init(sessionInstance: Job | Task, parameters: Record<string, string | number>): Promise<void> {
+    public async init(sessionInstance: Job, parameters: Record<string, string | number>): Promise<void> {
         this.session = sessionInstance;
         let framesRange: number[] | null = null;
+        // Extra parameters
+        this.threshold = parameters['Threshold'] as number;
         const framesRangeString = parameters['Frame Range Setting Panel for Object Tracking'];
         if (typeof framesRangeString === 'string' && framesRangeString.trim() !== '') {
             const parsed = framesRangeString.split('-').map((v) => v.trim()).map(Number);
             if (parsed.length === 2 && parsed.every((n) => !Number.isNaN(n))) framesRange = parsed;
         }
         [this.frameFrom, this.frameTo] = framesRange ?? [sessionInstance.startFrame, sessionInstance.stopFrame];
-        this.convertPolygonShapesToTracks = parameters['Convert polygon shapes to tracks'] === 'true';
     }
 
     public async destroy(): Promise<void> {
@@ -29,35 +32,41 @@ export class SAM2Tracker extends BaseSAMTrackAction {
     }
 
     public async run(input: SAMTrackActionInput): Promise<SAMTrackActionOutput> {
-        const { collection, onProgress, cancelled, frameData: { number, width, height } } = input;
+        const { batch } = input;
 
-        if (collection.shapes.length === 0 && collection.tracks.length === 0) {
-            throw new Error('The current job must have at least one polygon or mask annotations');
-        }
+        const payload = {jobId: this.session.id, threshold: this.threshold, batch: batch};
 
         // TODO: call model api to auto segment annotation
-        console.log('run action...');
+        // const response = await serverProxy.lambda.call("xxx", payload);
 
-        return {
-            created: { shapes: [], tracks: [] },
-            deleted: { shapes: [], tracks: [] },
-        };
+        for (const item of batch) {
+            console.log(`
+                frame: ${String(item.frame).padStart(4)}
+                objectId: ${item.objectId}
+                labelId: ${item.labelId}
+                type: ${item.type}
+                cond: ${Object.keys(item.cond)}
+                non-cond: ${Object.keys(item.non_cond)}
+            `);
+        }
+        console.log("===========");
+        console.dir(payload);
+        // console.log(JSON.stringify(payload));
+
+        return batch.map(item => ({ frame: item.frame, created: null, confidence: 0.0 }));
     }
 
     public applyFilter(
-        input: Pick<SAMTrackActionInput, 'collection' | 'frameData'>,
-    ): SAMTrackActionInput['collection'] {
-        const { collection } = input;
+        input: Pick<SerializedCollection, 'shapes' | 'tracks'>,
+    ): Pick<SerializedCollection, 'shapes' | 'tracks'> {
+        const { shapes, tracks } = input;
         const targetShapesType = [ShapeType.POLYGON, ShapeType.MASK];
         return {
-            shapes: collection.shapes
-                .filter((shape) => targetShapesType.includes(shape.type)),
-            tracks: collection.tracks
-                .filter((track) => targetShapesType.includes(track.shapes[0].type)),
+            shapes: shapes.filter((shape) => targetShapesType.includes(shape.type)),
+            tracks: tracks.filter((track) => targetShapesType.includes(track.shapes[0].type)),
         };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public isApplicableForObject(objectState: ObjectState): boolean {
         return false;
     }
@@ -68,11 +77,11 @@ export class SAM2Tracker extends BaseSAMTrackAction {
 
     public get parameters(): ActionParameters | null {
         return {
-            'Convert polygon shapes to tracks': {
-                type: ActionParameterType.CHECKBOX,
-                values: ['true', 'false'],
-                defaultValue: 'true',
-            },
+            "Threshold": {
+                type: ActionParameterType.NUMBER,
+                values: ['0', '1', '0.01'],
+                defaultValue: '0.6',
+            }
         };
     }
 }
