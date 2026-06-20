@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { throttle, range, each } from 'lodash';
+import { throttle } from 'lodash';
 import AnnotationsFilter from '../annotations-filter';
 import { Job, Task } from '../session';
 import { SerializedCollection, SerializedShape, SerializedTrack } from '../server-response-types';
@@ -14,18 +14,21 @@ import ObjectState from '../object-state';
 export interface SAMTrackActionInput {
     onProgress(message: string, percent: number): void;
     cancelled(): boolean;
-    collection: Pick<SerializedCollection, 'shapes' | 'tracks'>;
-    frameData: {
-        width: number;
-        height: number;
-        number: number;
-    };
+    batch: Array<{
+        frame: number;
+        objectId: string;
+        labelId: number;
+        type: string;
+        non_cond: Record<string, { id: number }>;
+        cond: Record<string, { id: number }>;
+    }>;
 }
 
-export interface SAMTrackActionOutput {
-    created: SAMTrackActionInput['collection'];
-    deleted: SAMTrackActionInput['collection'];
-}
+export type SAMTrackActionOutput = Array<{
+    frame: number;
+    confidence: number;
+    created: SerializedShape | SerializedTrack | null;
+}>;
 
 export abstract class BaseSAMTrackAction extends BaseAction {
     public frameFrom: number;
@@ -33,18 +36,231 @@ export abstract class BaseSAMTrackAction extends BaseAction {
     public isRenderActionRunnerFrames(): boolean { return false; }
     public abstract run(input: SAMTrackActionInput): Promise<SAMTrackActionOutput>;
     public abstract applyFilter(
-        input: Pick<SAMTrackActionInput, 'collection' | 'frameData'>
-    ): SAMTrackActionInput['collection'];
+        input: Pick<SerializedCollection, 'shapes' | 'tracks'>
+    ): Pick<SerializedCollection, 'shapes' | 'tracks'>;
+}
+
+function ProcessShape(
+    shape: SerializedShape,
+    removeFrameIds: Array<number>,
+    INTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>>,
+    INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>>
+): void {
+    if ('track_id' in shape) {
+        const trackID = shape.track_id as number; // TODO: track_id attribute maybe support future
+        const trackFrames = INTracksRecord[trackID] ?? {};
+
+        if (trackFrames[shape.frame]) {
+            throw new Error(
+                `Invalid annotation: multiple objects with track_id=${trackID} found in frame=${shape.frame}. ` +
+                `A track_id must be unique within a single frame.`
+            );
+        }
+
+        if (!removeFrameIds.includes(shape.frame)) {
+            trackFrames[shape.frame] = shape;
+            INTracksRecord[trackID] = trackFrames;
+        }
+    } else {
+        if (!removeFrameIds.includes(shape.frame)) {
+            INDependRecord.push({ [shape.frame]: shape });
+        }
+    }
+}
+
+function ProcessTrack(
+    track: SerializedTrack,
+    action: BaseSAMTrackAction,
+    removeFrameIds: Array<number>,
+    INTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>>,
+    INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>>
+): void {
+    if ('track_id' in track) {
+        const trackID = track.track_id as number; // TODO: track_id attribute maybe support future
+        const trackFrames = INTracksRecord[trackID] ?? {};
+
+        for (let frame = track.shapes[0].frame; frame <= action.frameTo; frame++) {
+            if ((track.shapes.filter((kf) => kf.frame <= frame).at(-1)).outside) break;
+            if (trackFrames[frame]) {
+                throw new Error(
+                    `Invalid annotation: multiple objects with track_id=${trackID} found in frame=${frame}. ` +
+                    `A track_id must be unique within a single frame.`
+                );
+            }
+            if (!removeFrameIds.includes(frame)) {
+                trackFrames[frame] = track;
+            }
+        }
+
+        if (Object.keys(trackFrames).length > 0) {
+            INTracksRecord[trackID] = trackFrames;
+        }
+    } else {
+        const trackRecord: Record<number, SerializedTrack> = {};
+
+        for (let frame = track.shapes[0].frame; frame <= action.frameTo; frame++) {
+            if ((track.shapes.filter((kf) => kf.frame <= frame).at(-1)).outside) break;
+            if (!removeFrameIds.includes(frame)) {
+                trackRecord[frame] = track;
+            }
+        }
+
+        if (Object.keys(trackRecord).length > 0) {
+            INDependRecord.push(trackRecord);
+        }
+    }
+}
+
+class SAMTrackObject {
+    private order: Array<number>;
+    private readonly removeFrameIds: Array<number>;
+
+    private readonly type: string;
+    private readonly labelId: number;
+    private readonly objectId: string;
+    private readonly non_cond: Record<number, SerializedShape | SerializedTrack>;
+    private readonly cond: Record<number, SerializedShape | SerializedTrack>;
+
+    private readonly frameFrom: number
+    private readonly frameTo: number
+
+    private updateOrder(): void {
+        const order: number[] = [];
+        const frames: number[] = [
+            ...Object.keys(this.cond).map(Number),
+            ...Object.keys(this.non_cond).map(Number),
+            ...this.removeFrameIds
+        ].sort((a, b) => a - b);
+
+        const processGroup = (group: number[]): void => {
+            if (group.every(id => this.removeFrameIds.includes(id))) return;
+            for (const frame of [Math.min(...group) - 1, Math.max(...group) + 1]) {
+                if (frame >= this.frameFrom && frame <= this.frameTo && !order.includes(frame)) {
+                    order.push(frame);
+                }
+            }
+        };
+
+        if (frames.length === 0) return;
+
+        let current: number[] = [frames[0]];
+        for (let i = 1; i < frames.length; i++) {
+            if (frames[i] === frames[i - 1] + 1) {
+                current.push(frames[i]);
+            } else {
+                processGroup(current);
+                current = [frames[i]];
+            }
+        }
+        processGroup(current);
+        this.order = order;
+    }
+
+    private getObjectId(data: Record<number, SerializedShape | SerializedTrack>): string {
+        const points_cluster = Object.values(data).flatMap((item) =>
+            'shapes' in item ? item.shapes.flatMap((shape) => shape.points) : item.points
+        ).map(String).join(',');
+
+        /*
+            Using simple hash algorithm: djb2
+
+            Why 5381?
+                Daniel J. Bernstein designed djb2 and, after extensive testing of initial values,
+                found that 5381 combined with the formula hash * 33 ^ c yielded the fewest collisions on real-world string data.
+         */
+        let hash = 5381;
+        for (let i = 0; i < points_cluster.length; i++) {
+            hash = ((hash << 5) + hash) ^ points_cluster.charCodeAt(i);
+            hash |= 0; }
+        return (hash >>> 0).toString(16);
+    }
+
+    private getLabelId(data: Record<number, SerializedShape | SerializedTrack>): number {
+        const labels = Object.values(data).map((item) => item.label_id);
+
+        if (!labels.length)
+            throw new Error('No objects selected');
+
+        if (!labels.every((l) => l === labels[0]))
+            throw new Error('Selected objects have different label');
+
+        return labels[0];
+    }
+
+    private getType(data: Record<number, SerializedShape | SerializedTrack>): string {
+        const types = Object.values(data).map((item) => 'shapes' in item ? item.shapes[0].type : item.type);
+
+        if (!types.length)
+            throw new Error('No objects selected');
+
+        if (!types.every((t) => t === types[0]))
+            throw new Error('Selected objects have different type');
+
+        return types[0];
+    }
+
+    get length(): number {
+        return (this.frameTo - this.frameFrom) - this.removeFrameIds.length -
+            Object.keys({...this.cond, ...this.non_cond}).length;
+    }
+
+    generate(): {
+        frame: number;
+        objectId: string;
+        labelId: number;
+        type: string;
+        non_cond: Record<string, { id: number }>;
+        cond: Record<string, { id: number }>;
+    } {
+        if (this.length === 0) return;
+        if (this.order.length === 0) {
+            this.updateOrder();
+            if (this.order.length === 0) return;
+        }
+
+        return {
+            frame: this.order.pop() as number,
+            objectId: this.objectId,
+            labelId: this.labelId,
+            type: this.type,
+            non_cond: Object.fromEntries(
+                Object.entries(this.non_cond).map(([k, v]) => [k, {id: v ? v.id : null}])
+            ),
+            cond: Object.fromEntries(
+                Object.entries(this.cond).map(([k, v]) => [k, {id: v.id as number}])
+            ),
+        };
+    }
+
+    update(
+        frame: number,
+        created: SerializedShape | SerializedTrack | null
+    ): void { this.non_cond[frame] = created; }
+
+    constructor(
+        data: Record<number, SerializedShape | SerializedTrack>,
+        removeFrameIds: Array<number>,
+        frameFrom: number,
+        frameTo: number
+    ) {
+        this.removeFrameIds = removeFrameIds;
+        this.frameFrom = frameFrom;
+        this.frameTo = frameTo;
+        this.cond = data;
+
+        this.type = this.getType(data);
+        this.labelId = this.getLabelId(data);
+        this.objectId = this.getObjectId(data);
+        this.non_cond = {};
+        this.order = [];
+    }
 }
 
 async function execute(
     instance: Job | Task,
     action: BaseSAMTrackAction,
     actionParameters: Record<string, string>,
-    callback: () => Promise<{
-        filteredShapesByFrame: Record<number, SerializedShape[]>;
-        filteredTracksByFrame: Record<number, SerializedTrack[]>;
-    }>,
+    callback: (removeFrameIds: Array<number>) => Promise<Array<SAMTrackObject>>,
     onProgress: (message: string, progress: number) => void,
     cancelled: () => boolean,
 ): Promise<void> {
@@ -56,39 +272,24 @@ async function execute(
         decoratedOnProgress(message, progress);
         await new Promise((resolve) => { setTimeout(resolve, duration); });
     };
-    const validateUniqueLabels = (
-        shapes: Record<number, SerializedShape[]>,
-        tracks: Record<number, SerializedTrack[]>): void => {
-        const allCondFrames = Array.from(
-            new Set([...Object.keys(shapes), ...Object.keys(tracks)]),
-        ).map(Number).sort((a, b) => a - b);
-        for (const frame of allCondFrames) {
-            const frameShapes = shapes[frame] ?? [];
-            const frameTracks = tracks[frame] ?? [];
-            const frameLabelsIDs = [
-                ...frameShapes.map((s) => s.label_id),
-                ...frameTracks.map((t) => t.label_id),
-            ];
+    const matchBatch = (samTrackObjects: Array<SAMTrackObject>, batchSize: number): number[][] => {
+        const result: number[][] = [];
+        const tracksNumbsRecord = samTrackObjects.map(v => v.length);
+        if (batchSize <= 0) batchSize = Math.max(...tracksNumbsRecord);
 
-            const labelMap = new Map(instance.labels.map((label) => [label.id, label.name]));
-            const countMap = frameLabelsIDs.reduce((map, id) => {
-                map.set(id, (map.get(id) ?? 0) + 1);
-                return map;
-            }, new Map<number, number>());
-
-            const invalidLabels = Array.from(countMap.entries())
-                .filter(([, count]) => count > 1)
-                .map(([id]) => labelMap.get(id));
-
-            if (invalidLabels.length > 0) {
-                throw new Error(
-                    `Duplicate labels detected on frame ${frame}: [${invalidLabels.join(', ')}]. ` +
-                    'Each label must appear at most once per frame, ' +
-                    'otherwise the tracker cannot distinguish between objects of the same category.',
-                );
+        while (tracksNumbsRecord.some(v => v > 0)) {
+            const batch: number[] = [];
+            for (let i = 0; i < tracksNumbsRecord.length; i++) {
+                if (tracksNumbsRecord[i] > 0) {
+                    batch.push(i);
+                    tracksNumbsRecord[i] -= 1;
+                    if (batch.length === batchSize) break;
+                }
             }
+            result.push(batch);
         }
-    };
+        return result;
+    }
 
     try {
         await showMessageWithPause('Action initialization', 0, 500);
@@ -96,75 +297,60 @@ async function execute(
             return;
         }
 
+        // Initial Action Setting
         await action.init(instance, prepareActionParameters(action.parameters, actionParameters));
         if (typeof action.frameFrom !== 'number' || typeof action.frameTo !== 'number' || action.frameFrom >= action.frameTo) {
             await showMessageWithPause('No frames or invalid frames to process', 100, 1500);
             return;
         }
 
-        // callback must be late for action.init, because callback will take action attribute: frameFrom, frameTo
-        const { filteredShapesByFrame, filteredTracksByFrame } = await callback();
+        const batchSize = -1; // TODO: Maybe read from SAMFunction spec. -1 for all
+        const removeFrameIds: Array<number> = (await Promise.all(
+            Array.from({ length: action.frameTo - action.frameFrom }, (_, i) => action.frameFrom + i)
+                .map(async frame => {
+                    const frameData = await Object.getPrototypeOf(instance).frames
+                        .get.implementation.call(instance, frame);
+                    return frameData.deleted ? frame : null;
+                })
+        )).filter((frame: number): boolean => frame !== null);
 
-        // Check unique label per frame to prevent predict problem
-        validateUniqueLabels(filteredShapesByFrame, filteredTracksByFrame);
-
-        const totalUpdates = { created: { shapes: [], tracks: [] }, deleted: { shapes: [], tracks: [] } };
-        // Iterate over frames
-        const allFrameNumbers = instance instanceof Job ?
-            await instance.frames.frameNumbers() : range(0, instance.size);
-        const frameNumbers = allFrameNumbers.filter((frame) => frame >= action.frameFrom && frame <= action.frameTo);
-        const totalFrames = frameNumbers.length;
-
-        const hasNoShapes = Object.keys(filteredShapesByFrame).length === 0;
-        const hasNoTracks = Object.keys(filteredTracksByFrame).length === 0;
-        if (totalFrames === 0 || (hasNoShapes && hasNoTracks)) {
-            await showMessageWithPause('No frames/annotations to process', 100, 1500);
+        // Callback call must be late for action.init, because callback will get action attribute: frameFrom, frameTo
+        const samTrackObjects: Array<SAMTrackObject> = await callback(removeFrameIds);
+        if (samTrackObjects.length === 0) {
+            await showMessageWithPause(`No Annotations to process`, 100, 1500);
             return;
         }
-        for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
-            const frame = frameNumbers[frameIdx];
-            const frameData = await Object.getPrototypeOf(instance).frames
-                .get.implementation.call(instance, frame);
 
-            // Ignore deleted frames
-            if (!frameData.deleted) {
-                const frameShapes = filteredShapesByFrame[frame] ?? [];
-                const frameTracks = filteredTracksByFrame[frame] ?? [];
+        // Iterate SAM Video Tracking
+        await showMessageWithPause('Actions are running', 0, 500);
+        const samTrackPredBatch = matchBatch(samTrackObjects, batchSize);
+        const sanTrackPredIters = samTrackPredBatch.length;
+        for (let i = 0; i < sanTrackPredIters; i++) {
+            const samTrackObjectsBatch = samTrackPredBatch[i].map(
+                gid => samTrackObjects[gid]);
 
-                // finally apply the own filter of the action
-                const filteredByAction = action.applyFilter({
-                    collection: {
-                        shapes: frameShapes,
-                        tracks: frameTracks,
-                    },
-                    frameData,
-                });
-                validateClientIDs(filteredByAction);
+            for (const [bid, {frame, created, confidence}] of (await action.run({
+                batch: samTrackObjectsBatch.map(obj => obj.generate()),
+                onProgress: decoratedOnProgress,
+                cancelled,
+            })).entries()) {
+                samTrackObjectsBatch[bid].update(frame, created); // update state
 
-                const { created, deleted } = await action.run({
-                    onProgress: decoratedOnProgress,
-                    cancelled,
-                    collection: {
-                        shapes: filteredByAction.shapes,
-                        tracks: filteredByAction.tracks,
-                    },
-                    frameData: {
-                        width: frameData.width,
-                        height: frameData.height,
-                        number: frameData.number,
-                    },
-                });
-
-                Array.prototype.push.apply(totalUpdates.created.shapes, created.shapes);
-                Array.prototype.push.apply(totalUpdates.created.tracks, created.tracks);
-                Array.prototype.push.apply(totalUpdates.deleted.shapes, deleted.shapes);
-                Array.prototype.push.apply(totalUpdates.deleted.tracks, deleted.tracks);
-
-                const progress = Math.ceil(((frameIdx + 1) / totalFrames) * 100);
-                decoratedOnProgress('Actions are running', progress);
-                if (cancelled()) {
-                    return;
+                if (created !== null) {
+                    await instance.annotations.commit(
+                        (this.action.convertPolygonShapesToTracks
+                        ? { shapes: [], tags: [], tracks: [created as SerializedTrack] }
+                        : { shapes: [created as SerializedShape], tags: [], tracks: [] }),
+                        { shapes: [], tags: [], tracks: [] },
+                        frame,
+                    );
                 }
+            }
+
+            const progress = Math.ceil(((i + 1) / sanTrackPredIters) * 100);
+            decoratedOnProgress('Actions are running', progress);
+            if (cancelled()) {
+                return;
             }
         }
 
@@ -172,13 +358,6 @@ async function execute(
         if (cancelled()) {
             return;
         }
-
-        await instance.annotations.commit(
-            { shapes: totalUpdates.created.shapes, tags: [], tracks: totalUpdates.created.tracks },
-            { shapes: totalUpdates.deleted.shapes, tags: [], tracks: totalUpdates.deleted.tracks },
-            frameNumbers[0],
-        );
-
         event.close();
     } finally {
         await action.destroy();
@@ -197,39 +376,33 @@ export async function run(
         instance,
         action,
         actionParameters,
-        async () => {
+        async (removeFrameIds: Array<number>): Promise<Array<SAMTrackObject>> => {
+            const INTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>> = {};
+            const INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>> = [];
+
             const exportedCollection = getCollection(instance).export();
             validateClientIDs(exportedCollection);
 
             const annotationsFilter = new AnnotationsFilter();
             const filteredClientIDs = annotationsFilter.filterSerializedCollection({
-                shapes: exportedCollection.shapes,
                 tags: [],
+                shapes: exportedCollection.shapes,
                 tracks: exportedCollection.tracks,
             }, instance.labels, filters);
-            const filteredShapesByFrame = exportedCollection.shapes.reduce((acc, shape) => {
-                if (!filteredClientIDs.shapes.includes(shape.clientID) || !shape.id) return acc;
 
-                if (shape.frame >= action.frameFrom && shape.frame <= action.frameTo) {
-                    acc[shape.frame] = acc[shape.frame] ?? [];
-                    acc[shape.frame].push(shape);
-                }
+            for (const shape of exportedCollection.shapes) {
+                if (!filteredClientIDs.shapes.includes(shape.clientID) || !shape.id) continue;
+                ProcessShape(shape, removeFrameIds, INTracksRecord, INDependRecord);
+            }
+            for (const track of exportedCollection.tracks) {
+                if (!filteredClientIDs.tracks.includes(track.clientID) || !track.id) continue;
+                ProcessTrack(track, action, removeFrameIds, INTracksRecord, INDependRecord);
+            }
 
-                return acc;
-            }, {} as Record<number, SerializedShape[]>);
-            const filteredTracksByFrame = exportedCollection.tracks.reduce((acc, track) => {
-                if (!filteredClientIDs.tracks.includes(track.clientID) || !track.id) return acc;
-
-                for (let frame = action.frameFrom; frame <= action.frameTo; frame++) {
-                    const prevKeyframe = track.shapes.filter((kf) => kf.frame <= frame).at(-1);
-                    if (!prevKeyframe || prevKeyframe.outside) continue;
-                    acc[frame] = acc[frame] ?? [];
-                    acc[frame].push(track);
-                }
-
-                return acc;
-            }, {} as Record<number, SerializedTrack[]>);
-            return { filteredShapesByFrame, filteredTracksByFrame };
+            return [ ...INDependRecord, ...Object.values(INTracksRecord) ].map(
+                record => new SAMTrackObject(record, removeFrameIds, action.frameFrom, action.frameTo)).filter(
+                    (obj: SAMTrackObject): boolean => obj.length > 0
+            );
         },
         onProgress,
         cancelled,
@@ -248,39 +421,25 @@ export async function call(
         instance,
         action,
         actionParameters,
-        async () => {
-            const filteredShapesByFrame: Record<number, SerializedShape[]> = {};
-            const filteredTracksByFrame: Record<number, SerializedTrack[]> = {};
-
+        async (removeFrameIds: Array<number>): Promise<Array<SAMTrackObject>> => {
+            const INTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>> = {};
+            const INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>> = [];
             const exported = await Promise.all(states.map((s) => s.export()));
-            const exportedCollection = getCollection(instance).export();
-            validateClientIDs(exportedCollection);
 
-            // TODO: Should select all tracks and shapes which match current state label_id
             exported.forEach((state, idx) => {
-                const { objectType } = states[idx];
-                if (objectType === ObjectType.SHAPE) {
-                    const shape = state as SerializedShape;
-                    if (!shape.id) throw new Error('The currently selected shape object has not been saved.');
-                    for (const s of exportedCollection.shapes) {
-                        if (s.frame >= action.frameFrom && s.frame <= action.frameTo && s.label_id === shape.label_id) {
-                            filteredShapesByFrame[s.frame] = filteredShapesByFrame[s.frame] ?? [];
-                            filteredShapesByFrame[s.frame].push(s);
-                        }
-                    }
-                } else if (objectType === ObjectType.TRACK) {
-                    const track = state as SerializedTrack;
-                    if (!track.id) throw new Error('The currently selected track object has not been saved.');
-                    for (let frame = action.frameFrom; frame <= action.frameTo; frame++) {
-                        const prevKeyframe = track.shapes.filter((kf) => kf.frame <= frame).at(-1);
-                        if (!prevKeyframe || prevKeyframe.outside) continue;
-                        filteredTracksByFrame[frame] = filteredTracksByFrame[frame] ?? [];
-                        filteredTracksByFrame[frame].push(track);
-                    }
+                if (!state.id) throw new Error('The currently selected annotation has not been saved.');
+
+                if (states[idx].objectType === ObjectType.SHAPE) {
+                    ProcessShape(state as SerializedShape, removeFrameIds, INTracksRecord, INDependRecord);
+                } else if (states[idx].objectType === ObjectType.TRACK) {
+                    ProcessTrack(state as SerializedTrack, action, removeFrameIds, INTracksRecord, INDependRecord);
                 }
             });
 
-            return { filteredShapesByFrame, filteredTracksByFrame };
+            return [ ...INDependRecord, ...Object.values(INTracksRecord) ].map(
+                record => new SAMTrackObject(record, removeFrameIds, action.frameFrom, action.frameTo)).filter(
+                    (obj: SAMTrackObject): boolean => obj.length > 0
+            );
         },
         onProgress,
         cancelled,
