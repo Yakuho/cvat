@@ -10,8 +10,6 @@ services:
     container_name: cvat_redis_sam
     image: redis:7.2-alpine
     restart: always
-    ports:
-      - '127.0.0.1:6379:6379'
     command: redis-server --appendonly yes
     volumes:
       - cvat_redis_sam_data:/data
