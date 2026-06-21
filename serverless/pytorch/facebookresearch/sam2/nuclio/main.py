@@ -60,7 +60,7 @@ def init_context(context: Context):
         raise EnvironmentError("CVAT Client Connect must set env (CVAT_USERNAME and CVAT_PASSWORD) or CVAT_TOKEN")
     config = Configuration(host=CVAT_API, username=CVAT_USERNAME, password=CVAT_PASSWORD, access_token=CVAT_TOKEN)
     client = ApiClient(config)
-    client.users_retrieve_current_user()  # ping
+    client.users_api.retrieve_self()  # ping
     context.logger.info("CVAT Client initialized done")
     context.logger.info("Init context...  33%")
 
