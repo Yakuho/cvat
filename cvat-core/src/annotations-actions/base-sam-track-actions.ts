@@ -383,18 +383,23 @@ export async function run(
             const exportedCollection = getCollection(instance).export();
             validateClientIDs(exportedCollection);
 
+            const filteredByAction = action.applyFilter({
+                shapes: exportedCollection.shapes,
+                tracks: exportedCollection.tracks,
+            });
+
             const annotationsFilter = new AnnotationsFilter();
             const filteredClientIDs = annotationsFilter.filterSerializedCollection({
                 tags: [],
-                shapes: exportedCollection.shapes,
-                tracks: exportedCollection.tracks,
+                shapes: filteredByAction.shapes,
+                tracks: filteredByAction.tracks,
             }, instance.labels, filters);
 
-            for (const shape of exportedCollection.shapes) {
+            for (const shape of filteredByAction.shapes) {
                 if (!filteredClientIDs.shapes.includes(shape.clientID) || !shape.id) continue;
                 ProcessShape(shape, removeFrameIds, INTracksRecord, INDependRecord);
             }
-            for (const track of exportedCollection.tracks) {
+            for (const track of filteredByAction.tracks) {
                 if (!filteredClientIDs.tracks.includes(track.clientID) || !track.id) continue;
                 ProcessTrack(track, action, removeFrameIds, INTracksRecord, INDependRecord);
             }
@@ -426,15 +431,26 @@ export async function call(
             const INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>> = [];
             const exported = await Promise.all(states.map((s) => s.export()));
 
+            const shapes: SerializedShape[] = [];
+            const tracks: SerializedTrack[] = [];
             exported.forEach((state, idx) => {
                 if (!state.id) throw new Error('The currently selected annotation has not been saved.');
 
                 if (states[idx].objectType === ObjectType.SHAPE) {
-                    ProcessShape(state as SerializedShape, removeFrameIds, INTracksRecord, INDependRecord);
+                    shapes.push(state as SerializedShape);
                 } else if (states[idx].objectType === ObjectType.TRACK) {
-                    ProcessTrack(state as SerializedTrack, action, removeFrameIds, INTracksRecord, INDependRecord);
+                    tracks.push(state as SerializedTrack);
                 }
             });
+            const filteredByAction = action.applyFilter({ shapes, tracks });
+
+            for (const shape of filteredByAction.shapes) {
+                ProcessShape(shape, removeFrameIds, INTracksRecord, INDependRecord);
+            }
+
+            for (const track of filteredByAction.tracks) {
+                ProcessTrack(track, action, removeFrameIds, INTracksRecord, INDependRecord);
+            }
 
             return [ ...INDependRecord, ...Object.values(INTracksRecord) ].map(
                 record => new SAMTrackObject(record, removeFrameIds, action.frameFrom, action.frameTo)).filter(
