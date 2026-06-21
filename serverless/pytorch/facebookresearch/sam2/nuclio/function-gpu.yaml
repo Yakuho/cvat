@@ -7,43 +7,52 @@ metadata:
 
 spec:
   description: sam2.1-large
-  runtime: python:3.11
+  runtime: python:3.12
   handler: main:handler
   eventTimeout: 120s
   replicas: 1     # k8s replicas pods
   minReplicas: 1  # k8s replicas min limit
   maxReplicas: 2  # k8s replicas max limit
+  env:
+    # ---------- CVAT Config ----------
+    - name: CVAT_API
+      value: "http://cvat-server:8080"
+    # (username and password) or token
+    - name: CVAT_TOKEN
+      value:
+    # (username and password) or token
+    - name: CVAT_USERNAME
+      value:
+    - name: CVAT_PASSWORD
+      value:
+    # ---------- Redis Cache ----------
+    - name: REDIS_HOST
+      value: "cvat_redis_sam"
+    - name: REDIS_PORT
+      value: "6379"
+    - name: REDIS_PASSWORD
+      value:
+    - name: REDIS_DB
+      value: "0"
+    # --------- Model Config ----------
+    - name: MODEL_CFG
+      value: "configs/sam2.1/sam2.1_hiera_l.yaml"
+    - name: MODEL
+      value: "sam2.1_hiera_large.pt"
+    - name: THRESHOLD
+      value: "0.6"
+    - name: BATCHSIZE
+      value: "1"
+    # ---------------------------------
   build:
     image: cvat.pt.facebookresearch.sam2.1.large:latest-gpu
-    baseImage: ubuntu:22.04
-    env:
-      - name: CVAT_API
-        value: "cvat_server"
-      - name: CVAT_TOKEN     # (username and password) or token
-        value:
-      - name: CVAT_USERNAME  # (username and password) or token
-        value:
-      - name: CVAT_PASSWORD
-        value:
-      - name: REDIS_HOST
-        value: "cvat_redis"
-      - name: REDIS_PORT
-        value: "6379"
-      - name: REDIS_PASSWORD
-        value:
-      - name: REDIS_DB
-        value: "0"
-      - name: MODEL_CFG
-        value: "sam2.1_hiera_l.yaml"
-      - name: MODEL
-        value: "sam2.1_hiera_large.pt"
-      - name: THRESHOLD
-        value: "0.6"
-      - name: BATCHSIZE
-        value: "1"
-
     directives:
       preCopy:
+        # set proxy
+        - kind: ENV
+          value: http_proxy=
+        - kind: ENV
+          value: https_proxy=
         # set NVIDIA container runtime settings
         - kind: ENV
           value: NVIDIA_VISIBLE_DEVICES=all
@@ -54,26 +63,28 @@ spec:
           value: DEBIAN_FRONTEND=noninteractive
         # set workdir
         - kind: WORKDIR
-          value: /opt/nuclio/sam2
+          value: /opt/nuclio  # nuclio default runtime path
         # install basic deps
         - kind: RUN
           value: apt-get update && apt-get -y install curl git python3 python3-pip python-is-python3 ffmpeg libsm6 libxext6 && rm -rf /var/lib/apt/lists/*
         # install sam deps
         - kind: RUN
-          value: pip3 install torch torchvision redis --no-cache-dir
+          value: pip3 install torch torchvision opencv-python redis cvat-sdk --no-cache-dir
         # install sam code
         - kind: RUN
           value: pip3 install git+https://github.com/facebookresearch/sam2.git --no-cache-dir
         # download sam weights
         - kind: RUN
           value: curl -O https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt
-
   triggers:
     http:
       kind: http
-      maxWorkers: 1
+      NumWorkers: 1
       attributes:
         maxRequestBodySize: 33554432
   resources:
     limits:
       nvidia.com/gpu: 1
+  platform:
+    attributes:
+      network: cvat_cvat
