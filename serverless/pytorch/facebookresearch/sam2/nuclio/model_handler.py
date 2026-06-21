@@ -431,33 +431,6 @@ class ModelHandler:
 
         return ious.squeeze(-1), low_res_masks, batch_imgsz
 
-    def _show(self, batch_low_res_masks, batch_imgsz, batch, jobId):
-        for i, item in enumerate(batch):
-            frame_idx = item["frame"]
-
-            buffer, response = self._client.jobs_api.retrieve_data(
-                jobId, type="frame", number=frame_idx, quality="original")
-            image = Image.open(buffer)
-            image = np.array(image, dtype=np.uint8)[:, :, ::-1]
-
-            # Try to clean image temp file
-            buffer.close()
-            try:
-                os.remove(buffer.name)
-            except PermissionError:
-                warnings.warn("Delete image temp file %s failed, suggest delete temp file to save space" % buffer.name)
-
-            mask = F.interpolate(batch_low_res_masks[i:i+1], mode="bilinear", align_corners=False, size=batch_imgsz[i])
-            mask = mask.detach().cpu().numpy()[0, 0]
-
-            overlay = image.copy()
-            overlay[mask > 0] = [0, 255, 0]  # 绿色
-            result = np.where(mask[..., None] > 0, (image * 0.4 + overlay * 0.6).astype(np.uint8), image)
-
-            cv2.namedWindow("result", cv2.WINDOW_NORMAL)
-            cv2.imshow("result", result)
-            cv2.waitKey(0)
-
     def handle(self, jobId: int, batch: list[dict], threshold=THRESHOLD, batch_size=BATCHSIZE):
         confs, masks, img_sizes = self._batch_step(jobId, batch)
         for conf, mask, img_size, info in zip(confs, masks, img_sizes, batch):
