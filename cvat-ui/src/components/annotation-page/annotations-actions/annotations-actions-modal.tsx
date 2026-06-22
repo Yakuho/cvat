@@ -250,13 +250,49 @@ function ActionParameterComponent(props: ActionParameterProps & { onChange: (val
     const store = getCVATStore();
 
     const job = store.getState().annotation.job.instance as Job;
-    const computedDefaultValue = typeof defaultValue === 'function' ? defaultValue({ instance: job }) : defaultValue;
-    const [value, setValue] = useState(computedDefaultValue);
-    useEffect(() => {
-        onChange(value);
-    }, [value]);
+    const [value, setValue] = useState('');
+    const [computedValues, setComputedValues] = useState<string[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const computedValues = typeof values === 'function' ? values({ instance: job }) : values;
+    useEffect(() => {
+        let cancelled = false;
+
+        Promise.all([
+            Promise.resolve(typeof defaultValue === 'function' ? defaultValue({ instance: job }) : defaultValue),
+            Promise.resolve(typeof values === 'function' ? values({ instance: job }) : values),
+        ]).then(([resolvedDefaultValue, resolvedValues]) => {
+            if (!cancelled) {
+                setValue(resolvedDefaultValue);
+                setComputedValues(resolvedValues);
+                setLoading(false);
+            }
+        }).catch((error: any) => {
+            if (!cancelled) {
+                setLoading(false);
+                notification.error({
+                    message: error instanceof Error ? error.message : 'Could not load action parameter values',
+                });
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!loading) {
+            onChange(value);
+        }
+    }, [value, loading]);
+
+    if (loading) {
+        if (type === ActionParameterType.SELECT) {
+            return <Select value={value} loading disabled />;
+        }
+
+        return <InputNumber value={+value} disabled />;
+    }
 
     if (type === ActionParameterType.SELECT) {
         return (

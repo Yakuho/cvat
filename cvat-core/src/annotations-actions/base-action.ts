@@ -13,13 +13,15 @@ export enum ActionParameterType {
     FRAMESRANGESELECTOR = 'framesrangeselect',
 }
 
+type ActionParameterValue<T> = T | Promise<T>;
+
 // For SELECT values should be a list of possible options
 // For NUMBER values should be a list with [min, max, step],
 // or a callback ({ instance }: { instance: Job | Task }) => [min, max, step]
 export type ActionParameters = Record<string, {
     type: ActionParameterType;
-    values: string[] | (({ instance }: { instance: Job | Task }) => string[]);
-    defaultValue: string | (({ instance }: { instance: Job | Task }) => string);
+    values: string[] | (({ instance }: { instance: Job | Task }) => ActionParameterValue<string[]>);
+    defaultValue: string | (({ instance }: { instance: Job | Task }) => ActionParameterValue<string>);
 }>;
 
 export abstract class BaseAction {
@@ -42,10 +44,15 @@ export function prepareActionParameters(declared: ActionParameters, defined: obj
     }
 
     return Object.entries(declared).reduce((acc, [name, { type, defaultValue }]) => {
+        if (!Object.hasOwn(defined, name) && typeof defaultValue === 'function') {
+            throw new Error(`Action parameter "${name}" is required`);
+        }
+
+        const value = Object.hasOwn(defined, name) ? defined[name] : defaultValue;
         if (type === ActionParameterType.NUMBER) {
-            acc[name] = +(Object.hasOwn(defined, name) ? defined[name] : defaultValue);
+            acc[name] = +value;
         } else {
-            acc[name] = (Object.hasOwn(defined, name) ? defined[name] : defaultValue);
+            acc[name] = value as string;
         }
         return acc;
     }, {} as Record<string, string | number>);
