@@ -38,6 +38,7 @@ function ModelsPageComponent(): JSX.Element {
         bulkFetching,
         interactors,
         detectors,
+        vtrackers,
         trackers,
         reid,
         totalCount,
@@ -48,6 +49,7 @@ function ModelsPageComponent(): JSX.Element {
         bulkFetching: state.bulkActions.fetching,
         interactors: state.models.interactors,
         detectors: state.models.detectors,
+        vtrackers: state.models.vtrackers,
         trackers: state.models.trackers,
         reid: state.models.reid,
         totalCount: state.models.totalCount,
@@ -58,7 +60,7 @@ function ModelsPageComponent(): JSX.Element {
 
     const { page, pageSize } = updatedQuery;
     const models = setUpModelsList(
-        [...interactors, ...detectors, ...trackers, ...reid],
+        [...interactors, ...detectors, ...trackers, ...vtrackers, ...reid],
         page,
         pageSize,
     );

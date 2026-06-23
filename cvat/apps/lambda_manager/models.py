@@ -11,3 +11,4 @@ class FunctionKind(models.TextChoices):
     INTERACTOR = "interactor"
     REID = "reid"
     TRACKER = "tracker"
+    VTRACKER = "vtracker"

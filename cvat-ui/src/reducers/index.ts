@@ -520,6 +520,7 @@ export interface ModelsState {
     interactors: MLModel[];
     detectors: MLModel[];
     trackers: MLModel[];
+    vtrackers: MLModel[];
     reid: MLModel[];
     totalCount: number;
     requestedInferenceIDs: {

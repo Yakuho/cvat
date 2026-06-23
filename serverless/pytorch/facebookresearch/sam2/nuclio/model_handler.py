@@ -193,7 +193,7 @@ class ModelHandler:
         return backbone_out, vision_feats, vision_pos_embeds, feat_sizes, imgsz
 
     @torch.no_grad()
-    def _get_image_memoutput(self, jobId: int, frame_idx: int, annotation_idx: int, objectId: str):
+    def _get_image_memoutput(self, jobId: int, frame_idx: int, anno_idx: int | None, anno_type: str | None, objectId: str):
         cache_key = REDIS_TMPL_KEY_MEMORY_OUTS.format(jobId=jobId, frame_idx=frame_idx, objectId=objectId)
         memory_out_cache = self._redis.get(cache_key)
         if memory_out_cache:
@@ -203,11 +203,18 @@ class ModelHandler:
             maskmem_features = data["maskmem_features"]
             low_res_mask = data["low_res_mask"]
         else:
+            assert isinstance(anno_idx, int), "Expect anno_idx type int, got anno_idx=%s" % anno_idx
             backbone_out, vision_feats, vision_pos_embeds, feat_sizes, imgsz = self._get_image_feature(jobId, frame_idx)
 
             # Loading annotation from cvat-client
             annotations, response = self._client.jobs_api.retrieve_annotations(jobId)
-            shape = [s for s in annotations.shapes if s["id"] == annotation_idx].pop(0)
+            if anno_type == "shape":
+                shape = [s for s in annotations.shapes if s["id"] == anno_idx].pop(0)
+            elif anno_type == "track":
+                track = [t for t in annotations.tracks if t["id"] == anno_idx].pop(0)
+                shape = [s for s in track.shapes if s["frame"] <= frame_idx and not s["outside"]].pop(-1)
+            else:
+                raise ValueError("anno_type must be either 'shape' or 'track'")
 
             # Build Mask
             mask = np.zeros(imgsz, dtype=np.uint8)
@@ -309,7 +316,7 @@ class ModelHandler:
         for t_pos, prev in t_pos_and_prevs:
             if prev is None:
                 continue  # skip padding frames
-            prev = self._get_image_memoutput(jobId, prev["frame"], prev["id"], objectId)
+            prev = self._get_image_memoutput(jobId, prev["frame"], prev.get("id"), prev.get("type"), objectId)
             feats = prev["maskmem_features"].to(self._device, non_blocking=True)
             to_cat_memory.append(feats.flatten(2).permute(2, 0, 1))
             # Temporal positional encoding

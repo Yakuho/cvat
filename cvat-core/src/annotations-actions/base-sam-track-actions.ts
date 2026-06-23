@@ -227,10 +227,16 @@ class SAMTrackObject {
             labelId: this.labelId,
             type: this.type,
             non_cond: Object.fromEntries(
-                Object.entries(this.non_cond).map(([k, v]) => [k, { id: v ? v.id : null }]),
+                Object.entries(this.non_cond).map(([k, v]) => [k, {
+                    id: v ? v.id : null,
+                    type: v ? ('shapes' in v ? 'track' : 'shape') : null,
+                }]),
             ),
             cond: Object.fromEntries(
-                Object.entries(this.cond).map(([k, v]) => [k, { id: v.id as number }]),
+                Object.entries(this.cond).map(([k, v]) => [k, {
+                    id: v.id as number,
+                    type: 'shapes' in v ? 'track' : 'shape',
+                }]),
             ),
         };
     }

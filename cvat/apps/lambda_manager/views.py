@@ -311,9 +311,9 @@ class LambdaFunction:
         payload = {}
         data = {k: v for k, v in data.items() if v is not None}
 
-        def mandatory_arg(name: str) -> Any:
+        def mandatory_arg(name: str, _data: dict | None = None) -> Any:
             try:
-                return data[name]
+                return (_data if _data else data)[name]
             except KeyError:
                 raise ValidationError(
                     "`{}` lambda function was called without mandatory argument: {}".format(
@@ -551,6 +551,22 @@ class LambdaFunction:
                 )
             except BadSignature as ex:
                 raise ValidationError("Invalid or expired tracker state") from ex
+        elif self.kind == FunctionKind.VTRACKER:
+            payload.update(
+                {
+                    "jobId": mandatory_arg("jobId"),
+                    "batch": [
+                        {
+                            "frame": mandatory_arg("frame", item),
+                            "objectId": mandatory_arg("objectId", item),
+                            "labelId": mandatory_arg("labelId", item),
+                            "type": mandatory_arg("type", item),
+                            "cond": mandatory_arg("cond", item),
+                            "non_cond": mandatory_arg("non_cond", item),
+                        } for item in mandatory_arg("batch")
+                    ],
+                }
+            )
         else:
             raise ValidationError(
                 "`{}` lambda function has incorrect type: {}".format(self.id, self.kind),

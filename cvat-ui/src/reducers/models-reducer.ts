@@ -17,6 +17,7 @@ const defaultState: ModelsState = {
     creatingStatus: '',
     interactors: [],
     detectors: [],
+    vtrackers: [],
     trackers: [],
     reid: [],
     modelRunnerIsVisible: false,
@@ -59,6 +60,9 @@ export default function (
                 )),
                 detectors: action.payload.models.filter((model: MLModel) => (
                     model.kind === ModelKind.DETECTOR
+                )),
+                vtrackers: action.payload.models.filter((model: MLModel) => (
+                    model.kind === ModelKind.VTRACKER
                 )),
                 trackers: action.payload.models.filter((model: MLModel) => (
                     model.kind === ModelKind.TRACKER

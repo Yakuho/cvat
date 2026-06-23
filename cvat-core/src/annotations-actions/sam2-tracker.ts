@@ -6,7 +6,7 @@ import { SerializedCollection } from '../server-response-types';
 import { BaseSAMTrackAction, SAMTrackActionInput, SAMTrackActionOutput } from './base-sam-track-actions';
 import { ActionParameters, ActionParameterType } from './base-action';
 import { Job } from '../session';
-import { ShapeType, ModelKind } from '../enums';
+import { ShapeType, ModelKind, Source } from '../enums';
 import ObjectState from '../object-state';
 import LambdaManager from '../lambda-manager';
 import MLModel from '../ml-model';
@@ -23,20 +23,17 @@ export class SAM2Tracker extends BaseSAMTrackAction {
     private static async getSAM2TrackerModels(): Promise<MLModel[]> {
         const { models } = await LambdaManager.list();
 
-        return models.filter((model: MLModel) => (
-            model.kind === ModelKind.TRACKER && model.name.toLowerCase().includes('sam2')
-        ));
+        return models.filter((model: MLModel) => (model.kind === ModelKind.VTRACKER));
     }
 
     private static async getDefaultModelName(): Promise<string> {
         const models = await SAM2Tracker.getSAM2TrackerModels();
-        const preferredModel = models.find((model: MLModel) => model.name === 'sam2-large') ?? models[0];
 
-        if (!preferredModel) {
-            throw new Error('No SAM2 tracker model found');
+        if (models.length === 0) {
+            throw new Error('No vtracker model found');
         }
 
-        return preferredModel.name;
+        return models[0].name;
     }
 
     public async init(sessionInstance: Job, parameters: Record<string, string | number>): Promise<void> {
@@ -49,7 +46,7 @@ export class SAM2Tracker extends BaseSAMTrackAction {
         const selectedModel = models.find((model: MLModel) => model.name === modelName);
 
         if (!selectedModel) {
-            throw new Error(`SAM2 tracker model "${modelName}" is not available`);
+            throw new Error(`vtracker model "${modelName}" is not available`);
         }
 
         this.model = selectedModel;
@@ -68,26 +65,46 @@ export class SAM2Tracker extends BaseSAMTrackAction {
     public async run(input: SAMTrackActionInput): Promise<SAMTrackActionOutput> {
         const { batch } = input;
 
-        const payload = {jobId: this.session.id, threshold: this.threshold, batch: batch};
+        const payload = { jobId: this.session.id, threshold: this.threshold, batch };
+        const response = await LambdaManager.call(this.session.taskId, this.model, payload);
 
-        // TODO: call model api to auto segment annotation
-        // const response = await serverProxy.lambda.call("xxx", payload);
-
-        for (const item of batch) {
-            console.log(`
-                frame: ${String(item.frame).padStart(4)}
-                objectId: ${item.objectId}
-                labelId: ${item.labelId}
-                type: ${item.type}
-                cond: ${Object.keys(item.cond)}
-                non-cond: ${Object.keys(item.non_cond)}
-            `);
+        if (!Array.isArray(response)) {
+            throw new Error(`vtracker model "${this.model.name}" returned invalid response`);
         }
-        console.log("===========");
-        console.dir(payload);
-        // console.log(JSON.stringify(payload));
 
-        return batch.map(item => ({ frame: item.frame, created: null, confidence: 0.0 }));
+        if (response.length !== batch.length) {
+            throw new Error(
+                `vtracker model "${this.model.name}" returned ${response.length} results for ${batch.length} items`,
+            );
+        }
+
+        return response.map((result, idx) => {
+            const item = batch[idx];
+
+            if (result === null) {
+                return { frame: item.frame, created: null, confidence: 0.0 };
+            }
+
+            return {
+                frame: item.frame,
+                confidence: result.confidence ?? 0.0,
+                created: {
+                    label_id: result.labelId ?? item.labelId,
+                    frame: item.frame,
+                    group: 0,
+                    source: Source.SEMI_AUTO,
+                    score: result.confidence ?? 0.0,
+                    attributes: [],
+                    elements: [],
+                    occluded: false,
+                    outside: false,
+                    points: result.points,
+                    rotation: 0,
+                    z_order: 0,
+                    type: result.type,
+                },
+            };
+        });
     }
 
     public applyFilter(

@@ -158,6 +158,7 @@ export enum ModelKind {
     DETECTOR = 'detector',
     INTERACTOR = 'interactor',
     TRACKER = 'tracker',
+    VTRACKER = 'vtracker',
     REID = 'reid',
 }
 
