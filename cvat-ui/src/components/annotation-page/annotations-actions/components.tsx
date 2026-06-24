@@ -8,14 +8,20 @@ import { Button } from 'antd';
 import InputNumber from 'antd/lib/input-number';
 import Slider from 'antd/lib/slider';
 
+interface FramesRangeSelectorProps {
+    value: string;
+    onChange: (value: string) => void;
+    startFrame: number;
+    stopFrame: number;
+    frameNumber: number;
+}
+
 export function FramesRangeSelector({
     value, onChange, startFrame, stopFrame, frameNumber,
-}: {
-    value: string, onChange: (val: string) => void, startFrame: number, stopFrame: number, frameNumber: number
-}): JSX.Element {
+}: FramesRangeSelectorProps): JSX.Element {
     const [frameRange, setFrameRange] = useState<[number, number]>([startFrame, stopFrame]);
 
-    const updateFrameRange = ([v1, v2]: number[]): void => {
+    const normalizeFrameRange = ([v1, v2]: number[]): [number, number] => {
         let lo = Math.min(v1, v2);
         let hi = Math.max(v1, v2);
 
@@ -30,9 +36,15 @@ export function FramesRangeSelector({
         lo = Math.max(lo, startFrame);
         hi = Math.min(hi, stopFrame);
 
-        const newRange: [number, number] = [lo, hi];
-        setFrameRange(newRange);
-        onChange(`${newRange[0]}-${newRange[1]}`);
+        return [lo, hi];
+    };
+
+    const formatFrameRange = (range: [number, number]): string => `${range[0]}-${range[1]}`;
+
+    const updateFrameRange = (range: number[]): void => {
+        const normalizedRange = normalizeFrameRange(range);
+        setFrameRange(normalizedRange);
+        onChange(formatFrameRange(normalizedRange));
     };
 
     useEffect(() => {
@@ -42,12 +54,17 @@ export function FramesRangeSelector({
         }).filter((v): v is number => v !== null);
 
         if (parts.length === 2) {
-            updateFrameRange([
+            const normalizedRange = normalizeFrameRange([
                 Math.max(Math.min(parts[0], parts[1]), startFrame),
                 Math.min(Math.max(parts[0], parts[1]), stopFrame),
             ]);
+
+            setFrameRange(normalizedRange);
+            if (formatFrameRange(normalizedRange) !== value) {
+                onChange(formatFrameRange(normalizedRange));
+            }
         }
-    }, [value, startFrame, stopFrame]);
+    }, [value, startFrame, stopFrame, frameNumber]);
 
     const trackFrames = Math.abs(frameRange[1] - frameRange[0]);
     const backwardInputMin = frameRange[1] === frameNumber ? 1 : 0;

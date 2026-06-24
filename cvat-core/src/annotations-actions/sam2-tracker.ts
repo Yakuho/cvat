@@ -45,7 +45,7 @@ export class SAM2Tracker extends BaseSAMTrackAction {
         if (!selectedModel) throw new Error(`SAM2 model "${modelName}" is not available`);
         this.model = selectedModel;
 
-        let framesRange: [number, number];
+        let framesRange: [number, number] | null = null;
         const framesRangeString = parameters[FRAME_RANGE_PARAMETER];
         if (typeof framesRangeString === 'string' && framesRangeString.trim() !== '') {
             const parsed = framesRangeString.split('-').map((v) => v.trim()).map(Number);
@@ -64,21 +64,21 @@ export class SAM2Tracker extends BaseSAMTrackAction {
         const { batch } = input;
 
         const payload = { jobId: this.session.id, threshold: this.threshold, batch };
-        const response = await LambdaManager.call(this.session.taskId, this.model, payload);
+        const results = await LambdaManager.call(this.session.taskId, this.model, payload);
 
-        if (!Array.isArray(response)) {
+        if (!Array.isArray(results)) {
             throw new Error(
                 `SAM2 model "${this.model.name}" returned invalid response`,
             );
         }
 
-        if (response.length !== batch.length) {
+        if (results.length !== batch.length) {
             throw new Error(
-                `SAM2 model "${this.model.name}" returned ${response.length} results for ${batch.length} items`,
+                `SAM2 model "${this.model.name}" returned ${results.length} results for ${batch.length} items`,
             );
         }
 
-        return response.map((result, idx) => {
+        return results.map((result, idx) => {
             const item = batch[idx];
 
             if (result === null) {

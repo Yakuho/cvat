@@ -30,8 +30,6 @@ export type SAMTrackActionOutput = Array<{
     created: SerializedShape | SerializedTrack | null;
 }>;
 
-export type SAMTrackActionBatchItem = SAMTrackActionInput['batch'][number];
-
 export abstract class BaseSAMTrackAction extends BaseAction {
     public frameFrom: number;
     public frameTo: number;
@@ -42,11 +40,15 @@ export abstract class BaseSAMTrackAction extends BaseAction {
     ): Pick<SerializedCollection, 'shapes' | 'tracks'>;
 }
 
-function ProcessShape(
+type SAMTrackActionBatchItem = SAMTrackActionInput['batch'][number];
+type FrameObjectMap = Record<number, SerializedShape | SerializedTrack>;
+type TrackShapeMap = Record<number, FrameObjectMap>;
+
+function processShape(
     shape: SerializedShape,
     removeFrameIds: Array<number>,
-    inTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>>,
-    inDependRecord: Array<Record<number, SerializedShape | SerializedTrack>>,
+    inTracksRecord: TrackShapeMap,
+    inDependRecord: Array<FrameObjectMap>,
 ): void {
     if ('track_id' in shape) {
         const trackID = shape.track_id as number; // TODO: track_id attribute maybe support future
@@ -68,19 +70,20 @@ function ProcessShape(
     }
 }
 
-function ProcessTrack(
+function processTrack(
     track: SerializedTrack,
     action: BaseSAMTrackAction,
     removeFrameIds: Array<number>,
-    inTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>>,
-    inDependRecord: Array<Record<number, SerializedShape | SerializedTrack>>,
+    inTracksRecord: TrackShapeMap,
+    inDependRecord: Array<FrameObjectMap>,
 ): void {
     if ('track_id' in track) {
         const trackID = track.track_id as number; // TODO: track_id attribute maybe support future
         const trackFrames = inTracksRecord[trackID] ?? {};
 
         for (let { frame } = track.shapes[0]; frame <= action.frameTo; frame++) {
-            if ((track.shapes.filter((kf) => kf.frame <= frame).at(-1)).outside) break;
+            const keyframe = track.shapes.filter((kf) => kf.frame <= frame).at(-1);
+            if (!keyframe || keyframe.outside) break;
             if (trackFrames[frame]) {
                 throw new Error(
                     `Invalid annotation: multiple objects with track_id=${trackID} found in frame=${frame}. ` +
@@ -99,7 +102,8 @@ function ProcessTrack(
         const trackRecord: Record<number, SerializedTrack> = {};
 
         for (let { frame } = track.shapes[0]; frame <= action.frameTo; frame++) {
-            if ((track.shapes.filter((kf) => kf.frame <= frame).at(-1)).outside) break;
+            const keyframe = track.shapes.filter((kf) => kf.frame <= frame).at(-1);
+            if (!keyframe || keyframe.outside) break;
             if (!removeFrameIds.includes(frame)) {
                 trackRecord[frame] = track;
             }
@@ -118,7 +122,7 @@ class SAMTrackObject {
     private readonly type: string;
     private readonly labelId: number;
     private readonly objectId: string;
-    private readonly non_cond: Record<number, SerializedShape | SerializedTrack>;
+    private readonly nonCond: Record<number, SerializedShape | SerializedTrack | null>;
     private readonly cond: Record<number, SerializedShape | SerializedTrack>;
 
     private readonly frameFrom: number;
@@ -128,7 +132,7 @@ class SAMTrackObject {
         const order: number[] = [];
         const frames: number[] = [
             ...Object.keys(this.cond).map(Number),
-            ...Object.keys(this.non_cond).map(Number),
+            ...Object.keys(this.nonCond).map(Number),
             ...this.removeFrameIds,
         ].sort((a, b) => a - b);
 
@@ -210,7 +214,7 @@ class SAMTrackObject {
 
     get length(): number {
         return (this.frameTo - this.frameFrom) - this.removeFrameIds.length -
-            Object.keys({ ...this.cond, ...this.non_cond }).length;
+            Object.keys({ ...this.cond, ...this.nonCond }).length;
     }
 
     generate(): SAMTrackActionBatchItem | undefined {
@@ -226,7 +230,7 @@ class SAMTrackObject {
             labelId: this.labelId,
             type: this.type,
             non_cond: Object.fromEntries(
-                Object.entries(this.non_cond).map(([k, v]) => {
+                Object.entries(this.nonCond).map(([k, v]) => {
                     if (!v) return [k, { id: null, type: null }];
                     return [k, { id: v.id, type: 'shapes' in v ? 'track' : 'shape' }];
                 }),
@@ -243,7 +247,7 @@ class SAMTrackObject {
     update(
         frame: number,
         created: SerializedShape | SerializedTrack | null,
-    ): void { this.non_cond[frame] = created; }
+    ): void { this.nonCond[frame] = created; }
 
     constructor(
         data: Record<number, SerializedShape | SerializedTrack>,
@@ -259,7 +263,7 @@ class SAMTrackObject {
         this.type = this.getType(data);
         this.labelId = this.getLabelId(data);
         this.objectId = this.getObjectId(data);
-        this.non_cond = {};
+        this.nonCond = {};
         this.order = [];
     }
 }
@@ -280,21 +284,21 @@ async function execute(
         decoratedOnProgress(message, progress);
         await new Promise((resolve) => { setTimeout(resolve, duration); });
     };
-    const matchBatch = (samTrackObjects: Array<SAMTrackObject>, batchSize: number): number[][] => {
+    const matchBatch = (samTrackObjects: Array<SAMTrackObject>, initialBatchSize: number): number[][] => {
         const result: number[][] = [];
-        const tracksNumbsRecord = samTrackObjects.map((v) => v.length);
+        const trackFramesCount = samTrackObjects.map((object) => object.length);
 
+        let batchSize = initialBatchSize;
         if (batchSize <= 0) {
-            // eslint-disable-next-line no-param-reassign
-            batchSize = tracksNumbsRecord.length > 0 ? Math.max(...tracksNumbsRecord) : 1;
+            batchSize = trackFramesCount.length > 0 ? Math.max(...trackFramesCount) : 1;
         }
 
-        while (tracksNumbsRecord.some((v) => v > 0)) {
+        while (trackFramesCount.some((count) => count > 0)) {
             const batch: number[] = [];
-            for (let i = 0; i < tracksNumbsRecord.length; i++) {
-                if (tracksNumbsRecord[i] > 0) {
+            for (let i = 0; i < trackFramesCount.length; i++) {
+                if (trackFramesCount[i] > 0) {
                     batch.push(i);
-                    tracksNumbsRecord[i] -= 1;
+                    trackFramesCount[i] -= 1;
                     if (batch.length === batchSize) {
                         break;
                     }
@@ -326,7 +330,7 @@ async function execute(
                         .get.implementation.call(instance, frame);
                     return frameData.deleted ? frame : null;
                 }),
-        )).filter((frame: number): boolean => frame !== null);
+        )).filter((frame): frame is number => frame !== null);
 
         // Callback call must be late for action.init, because callback will get action attribute: frameFrom, frameTo
         const samTrackObjects: Array<SAMTrackObject> = await callback(removeFrameIds);
@@ -338,18 +342,28 @@ async function execute(
         // Iterate SAM Video Tracking
         await showMessageWithPause('Actions are running', 0, 500);
         const samTrackPredBatch = matchBatch(samTrackObjects, batchSize);
-        const sanTrackPredIters = samTrackPredBatch.length;
-        for (let i = 0; i < sanTrackPredIters; i++) {
+        const samTrackPredIters = samTrackPredBatch.length;
+        for (let i = 0; i < samTrackPredIters; i++) {
             const samTrackObjectsBatch = samTrackPredBatch[i].map((gid) => samTrackObjects[gid]);
+
+            const generatedBatch = samTrackObjectsBatch
+                .map((object) => ({ object, item: object.generate() }))
+                .filter((value): value is { object: SAMTrackObject; item: SAMTrackActionBatchItem } => (
+                    typeof value.item !== 'undefined'
+                ));
+
+            if (generatedBatch.length === 0) {
+                continue;
+            }
 
             // NOTE: Maybe confidence need to save in future
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             for (const [bid, { frame, created, confidence }] of (await action.run({
-                batch: samTrackObjectsBatch.map((obj) => obj.generate()),
+                batch: generatedBatch.map(({ item }) => item),
                 onProgress: decoratedOnProgress,
                 cancelled,
             })).entries()) {
-                samTrackObjectsBatch[bid].update(frame, created); // update state
+                generatedBatch[bid].object.update(frame, created); // update state
 
                 if (created !== null) {
                     await instance.annotations.commit(
@@ -360,7 +374,7 @@ async function execute(
                 }
             }
 
-            const progress = Math.ceil(((i + 1) / sanTrackPredIters) * 100);
+            const progress = Math.ceil(((i + 1) / samTrackPredIters) * 100);
             decoratedOnProgress('Actions are running', progress);
             if (cancelled()) {
                 return;
@@ -410,11 +424,11 @@ export async function run(
 
             for (const shape of filteredByAction.shapes) {
                 if (!filteredClientIDs.shapes.includes(shape.clientID) || !shape.id) continue;
-                ProcessShape(shape, removeFrameIds, inTracksRecord, inDependRecord);
+                processShape(shape, removeFrameIds, inTracksRecord, inDependRecord);
             }
             for (const track of filteredByAction.tracks) {
                 if (!filteredClientIDs.tracks.includes(track.clientID) || !track.id) continue;
-                ProcessTrack(track, action, removeFrameIds, inTracksRecord, inDependRecord);
+                processTrack(track, action, removeFrameIds, inTracksRecord, inDependRecord);
             }
 
             return [...inDependRecord, ...Object.values(inTracksRecord)].map(
@@ -458,11 +472,11 @@ export async function call(
             const filteredByAction = action.applyFilter({ shapes, tracks });
 
             for (const shape of filteredByAction.shapes) {
-                ProcessShape(shape, removeFrameIds, inTracksRecord, inDependRecord);
+                processShape(shape, removeFrameIds, inTracksRecord, inDependRecord);
             }
 
             for (const track of filteredByAction.tracks) {
-                ProcessTrack(track, action, removeFrameIds, inTracksRecord, inDependRecord);
+                processTrack(track, action, removeFrameIds, inTracksRecord, inDependRecord);
             }
 
             return [...inDependRecord, ...Object.values(inTracksRecord)].map(
