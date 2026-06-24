@@ -19,8 +19,8 @@ export interface SAMTrackActionInput {
         objectId: string;
         labelId: number;
         type: string;
-        non_cond: Record<string, { id: number }>;
-        cond: Record<string, { id: number }>;
+        non_cond: Record<string, { id: number | null, type: 'track' | 'shape' | null }>;
+        cond: Record<string, { id: number, type: 'track' | 'shape' | null }>;
     }>;
 }
 
@@ -29,6 +29,8 @@ export type SAMTrackActionOutput = Array<{
     confidence: number;
     created: SerializedShape | SerializedTrack | null;
 }>;
+
+export type SAMTrackActionBatchItem = SAMTrackActionInput['batch'][number];
 
 export abstract class BaseSAMTrackAction extends BaseAction {
     public frameFrom: number;
@@ -43,12 +45,12 @@ export abstract class BaseSAMTrackAction extends BaseAction {
 function ProcessShape(
     shape: SerializedShape,
     removeFrameIds: Array<number>,
-    INTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>>,
-    INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>>,
+    inTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>>,
+    inDependRecord: Array<Record<number, SerializedShape | SerializedTrack>>,
 ): void {
     if ('track_id' in shape) {
         const trackID = shape.track_id as number; // TODO: track_id attribute maybe support future
-        const trackFrames = INTracksRecord[trackID] ?? {};
+        const trackFrames = inTracksRecord[trackID] ?? {};
 
         if (trackFrames[shape.frame]) {
             throw new Error(
@@ -59,10 +61,10 @@ function ProcessShape(
 
         if (!removeFrameIds.includes(shape.frame)) {
             trackFrames[shape.frame] = shape;
-            INTracksRecord[trackID] = trackFrames;
+            inTracksRecord[trackID] = trackFrames;
         }
     } else if (!removeFrameIds.includes(shape.frame)) {
-        INDependRecord.push({ [shape.frame]: shape });
+        inDependRecord.push({ [shape.frame]: shape });
     }
 }
 
@@ -70,12 +72,12 @@ function ProcessTrack(
     track: SerializedTrack,
     action: BaseSAMTrackAction,
     removeFrameIds: Array<number>,
-    INTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>>,
-    INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>>,
+    inTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>>,
+    inDependRecord: Array<Record<number, SerializedShape | SerializedTrack>>,
 ): void {
     if ('track_id' in track) {
         const trackID = track.track_id as number; // TODO: track_id attribute maybe support future
-        const trackFrames = INTracksRecord[trackID] ?? {};
+        const trackFrames = inTracksRecord[trackID] ?? {};
 
         for (let { frame } = track.shapes[0]; frame <= action.frameTo; frame++) {
             if ((track.shapes.filter((kf) => kf.frame <= frame).at(-1)).outside) break;
@@ -91,7 +93,7 @@ function ProcessTrack(
         }
 
         if (Object.keys(trackFrames).length > 0) {
-            INTracksRecord[trackID] = trackFrames;
+            inTracksRecord[trackID] = trackFrames;
         }
     } else {
         const trackRecord: Record<number, SerializedTrack> = {};
@@ -104,7 +106,7 @@ function ProcessTrack(
         }
 
         if (Object.keys(trackRecord).length > 0) {
-            INDependRecord.push(trackRecord);
+            inDependRecord.push(trackRecord);
         }
     }
 }
@@ -160,18 +162,22 @@ class SAMTrackObject {
         )).map(String).join(',');
 
         /*
-            Using simple hash algorithm: djb2
+            Using a simple non-cryptographic hash algorithm: djb2 xor variant.
 
-            Why 5381?
-                Daniel J. Bernstein designed djb2 and, after extensive testing of initial values,
-                found that 5381 combined with the formula hash * 33 ^ c yielded the fewest collisions on real-world string data.
+            The initial value 5381 is commonly used by djb2.
+            This implementation updates the hash as:
+
+                hash = (hash * 33) ^ c
+
+            where c is the current character code.
          */
         let hash = 5381;
+
         for (let i = 0; i < pointsCluster.length; i++) {
-            hash = ((hash << 5) + hash) ^ pointsCluster.charCodeAt(i);
-            hash |= 0;
+            hash = (hash * 33 + pointsCluster.charCodeAt(i)) % 0x100000000;
         }
-        return (hash >>> 0).toString(16);
+
+        return hash.toString(16).padStart(8, '0');
     }
 
     private getLabelId(data: Record<number, SerializedShape | SerializedTrack>): number {
@@ -207,18 +213,11 @@ class SAMTrackObject {
             Object.keys({ ...this.cond, ...this.non_cond }).length;
     }
 
-    generate(): {
-        frame: number;
-        objectId: string;
-        labelId: number;
-        type: string;
-        non_cond: Record<string, { id: number }>;
-        cond: Record<string, { id: number }>;
-    } {
-        if (this.length === 0) return;
+    generate(): SAMTrackActionBatchItem | undefined {
+        if (this.length === 0) return undefined;
         if (this.order.length === 0) {
             this.updateOrder();
-            if (this.order.length === 0) return;
+            if (this.order.length === 0) return undefined;
         }
 
         return {
@@ -227,14 +226,14 @@ class SAMTrackObject {
             labelId: this.labelId,
             type: this.type,
             non_cond: Object.fromEntries(
-                Object.entries(this.non_cond).map(([k, v]) => [k, {
-                    id: v ? v.id : null,
-                    type: v ? ('shapes' in v ? 'track' : 'shape') : null,
-                }]),
+                Object.entries(this.non_cond).map(([k, v]) => {
+                    if (!v) return [k, { id: null, type: null }];
+                    return [k, { id: v.id, type: 'shapes' in v ? 'track' : 'shape' }];
+                }),
             ),
             cond: Object.fromEntries(
                 Object.entries(this.cond).map(([k, v]) => [k, {
-                    id: v.id as number,
+                    id: Number(v.id),
                     type: 'shapes' in v ? 'track' : 'shape',
                 }]),
             ),
@@ -285,8 +284,10 @@ async function execute(
         const result: number[][] = [];
         const tracksNumbsRecord = samTrackObjects.map((v) => v.length);
 
-        // eslint-disable-next-line no-param-reassign
-        if (batchSize <= 0) batchSize = Math.max(...tracksNumbsRecord);
+        if (batchSize <= 0) {
+            // eslint-disable-next-line no-param-reassign
+            batchSize = tracksNumbsRecord.length > 0 ? Math.max(...tracksNumbsRecord) : 1;
+        }
 
         while (tracksNumbsRecord.some((v) => v > 0)) {
             const batch: number[] = [];
@@ -294,7 +295,9 @@ async function execute(
                 if (tracksNumbsRecord[i] > 0) {
                     batch.push(i);
                     tracksNumbsRecord[i] -= 1;
-                    if (batch.length === batchSize) break;
+                    if (batch.length === batchSize) {
+                        break;
+                    }
                 }
             }
             result.push(batch);
@@ -387,8 +390,8 @@ export async function run(
         action,
         actionParameters,
         async (removeFrameIds: Array<number>): Promise<Array<SAMTrackObject>> => {
-            const INTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>> = {};
-            const INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>> = [];
+            const inTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>> = {};
+            const inDependRecord: Array<Record<number, SerializedShape | SerializedTrack>> = [];
 
             const exportedCollection = getCollection(instance).export();
             validateClientIDs(exportedCollection);
@@ -407,14 +410,14 @@ export async function run(
 
             for (const shape of filteredByAction.shapes) {
                 if (!filteredClientIDs.shapes.includes(shape.clientID) || !shape.id) continue;
-                ProcessShape(shape, removeFrameIds, INTracksRecord, INDependRecord);
+                ProcessShape(shape, removeFrameIds, inTracksRecord, inDependRecord);
             }
             for (const track of filteredByAction.tracks) {
                 if (!filteredClientIDs.tracks.includes(track.clientID) || !track.id) continue;
-                ProcessTrack(track, action, removeFrameIds, INTracksRecord, INDependRecord);
+                ProcessTrack(track, action, removeFrameIds, inTracksRecord, inDependRecord);
             }
 
-            return [...INDependRecord, ...Object.values(INTracksRecord)].map(
+            return [...inDependRecord, ...Object.values(inTracksRecord)].map(
                 (record) => new SAMTrackObject(record, removeFrameIds, action.frameFrom, action.frameTo)).filter(
                 (obj: SAMTrackObject): boolean => obj.length > 0,
             );
@@ -437,8 +440,8 @@ export async function call(
         action,
         actionParameters,
         async (removeFrameIds: Array<number>): Promise<Array<SAMTrackObject>> => {
-            const INTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>> = {};
-            const INDependRecord: Array<Record<number, SerializedShape | SerializedTrack>> = [];
+            const inTracksRecord: Record<number, Record<number, SerializedShape | SerializedTrack>> = {};
+            const inDependRecord: Array<Record<number, SerializedShape | SerializedTrack>> = [];
             const exported = await Promise.all(states.map((s) => s.export()));
 
             const shapes: SerializedShape[] = [];
@@ -455,14 +458,14 @@ export async function call(
             const filteredByAction = action.applyFilter({ shapes, tracks });
 
             for (const shape of filteredByAction.shapes) {
-                ProcessShape(shape, removeFrameIds, INTracksRecord, INDependRecord);
+                ProcessShape(shape, removeFrameIds, inTracksRecord, inDependRecord);
             }
 
             for (const track of filteredByAction.tracks) {
-                ProcessTrack(track, action, removeFrameIds, INTracksRecord, INDependRecord);
+                ProcessTrack(track, action, removeFrameIds, inTracksRecord, inDependRecord);
             }
 
-            return [...INDependRecord, ...Object.values(INTracksRecord)].map(
+            return [...inDependRecord, ...Object.values(inTracksRecord)].map(
                 (record) => new SAMTrackObject(record, removeFrameIds, action.frameFrom, action.frameTo)).filter(
                 (obj: SAMTrackObject): boolean => obj.length > 0,
             );
