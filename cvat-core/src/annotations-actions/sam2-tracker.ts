@@ -79,7 +79,7 @@ export class SAM2Tracker extends BaseSAMTrackAction {
         }
 
         return results.map((result, idx) => {
-            const item = batch[idx];
+            const item = batch[idx]; // TODO: 需要根据 ObjectId 做对齐对比
 
             if (result === null) {
                 return { frame: item.frame, created: null, confidence: 0.0 };
@@ -162,7 +162,7 @@ export class SAM2TrackerObject extends SAM2Tracker {
         return {
             ...super.parameters,
             [FRAME_RANGE_PARAMETER]: {
-                type: ActionParameterType.FRAMESRANGESELECTOR,
+                type: ActionParameterType.FRAMES_RANGE_SELECTOR,
                 values: ({ instance }) => {
                     if (instance instanceof Job) {
                         return [instance.startFrame, instance.stopFrame].map((val) => val.toString());

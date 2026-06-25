@@ -315,7 +315,7 @@ function ActionParameterComponent(props: ActionParameterProps & { onChange: (val
         );
     }
 
-    if (type === ActionParameterType.FRAMESRANGESELECTOR) {
+    if (type === ActionParameterType.FRAMES_RANGE_SELECTOR) {
         const [startFrame, stopFrame] = computedValues.map((val) => +val);
         return (
             <FramesRangeSelector

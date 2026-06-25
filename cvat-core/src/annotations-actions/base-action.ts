@@ -10,7 +10,7 @@ export enum ActionParameterType {
     SELECT = 'select',
     NUMBER = 'number',
     CHECKBOX = 'checkbox',
-    FRAMESRANGESELECTOR = 'framesrangeselect',
+    FRAMES_RANGE_SELECTOR = 'frames_range_select',
 }
 
 type ActionParameterValue<T> = T | Promise<T>;
