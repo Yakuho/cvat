@@ -257,12 +257,12 @@ class ModelHandler:
         return dict(maskmem_features=maskmem_features, maskmem_pos_enc=maskmem_pos_enc, maskmem_pred_masks=low_res_mask)
 
     @torch.no_grad()
-    def _prepare_memory_conditioned_features(self, jobId: int, frame: int, objectId: str, cond: dict, non_cond: dict):
+    def _prepare_memory_conditioned_features(self, jobId: int, frame: int, objectId: str, cond: dict, non_cond: list):
         """reference: sam2/modeling/sam2_base.py function: SAM2Base._prepare_memory_conditioned_features"""
         frame_idx = frame
         num_frames = len(cond) + len(non_cond) + 1
         cond = {int(k): v for k, v in cond.items()}  # force str to int
-        non_cond = {int(k): v for k, v in non_cond.items()}  # force str to int
+        non_cond = {int(fid): {} for fid in non_cond}  # force str to int and compat SAM2 handle code
 
         track_in_reverse = frame_idx < sorted([*cond.keys(), *non_cond.keys()])[0]
         backbone_out, vision_feats, vision_pos_embeds, feat_sizes, imgsz = self._get_image_feature(jobId, frame_idx)
@@ -311,7 +311,7 @@ class ModelHandler:
                 # If an unselected conditioning frame is among the last (self.num_maskmem - 1)
                 # frames, we still attend to it as if it's a non-conditioning frame.
                 out = unselected_cond_outputs.get(prev_frame_idx, None)
-            t_pos_and_prevs.append((t_pos, {"frame": prev_frame_idx, **out} if out else out))
+            t_pos_and_prevs.append((t_pos, {"frame": prev_frame_idx, **out} if out is not None else out))
 
         for t_pos, prev in t_pos_and_prevs:
             if prev is None:

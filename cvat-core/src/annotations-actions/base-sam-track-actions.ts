@@ -19,8 +19,8 @@ export interface SAMTrackActionInput {
         objectId: string;
         labelId: number;
         type: string;
-        non_cond: Record<string, { id: number | null, type: 'track' | 'shape' | null }>;
-        cond: Record<string, { id: number, type: 'track' | 'shape' | null }>;
+        non_cond: Array<number>;
+        cond: Record<number, { id: number, type: 'track' | 'shape' }>;
     }>;
 }
 
@@ -122,7 +122,7 @@ class SAMTrackObject {
     private readonly type: string;
     private readonly labelId: number;
     private readonly objectId: string;
-    private readonly nonCond: Record<number, SerializedShape | SerializedTrack | null>;
+    private readonly nonCond: Array<number>;
     private readonly cond: Record<number, SerializedShape | SerializedTrack>;
 
     private readonly frameFrom: number;
@@ -132,7 +132,7 @@ class SAMTrackObject {
         const order: number[] = [];
         const frames: number[] = [
             ...Object.keys(this.cond).map(Number),
-            ...Object.keys(this.nonCond).map(Number),
+            ...this.nonCond,
             ...this.removeFrameIds,
         ].sort((a, b) => a - b);
 
@@ -214,7 +214,7 @@ class SAMTrackObject {
 
     get length(): number {
         return (this.frameTo - this.frameFrom) - this.removeFrameIds.length -
-            Object.keys({ ...this.cond, ...this.nonCond }).length;
+            Object.keys({ ...this.cond }).length - this.nonCond.length;
     }
 
     generate(): SAMTrackActionBatchItem | undefined {
@@ -229,12 +229,7 @@ class SAMTrackObject {
             objectId: this.objectId,
             labelId: this.labelId,
             type: this.type,
-            non_cond: Object.fromEntries(
-                Object.entries(this.nonCond).map(([k, v]) => {
-                    if (!v) return [k, { id: null, type: null }];
-                    return [k, { id: v.id, type: 'shapes' in v ? 'track' : 'shape' }];
-                }),
-            ),
+            non_cond: this.nonCond,
             cond: Object.fromEntries(
                 Object.entries(this.cond).map(([k, v]) => [k, {
                     id: Number(v.id),
@@ -244,10 +239,7 @@ class SAMTrackObject {
         };
     }
 
-    update(
-        frame: number,
-        created: SerializedShape | SerializedTrack | null,
-    ): void { this.nonCond[frame] = created; }
+    update(frame: number): void { this.nonCond.push(frame); }
 
     constructor(
         data: Record<number, SerializedShape | SerializedTrack>,
@@ -263,7 +255,7 @@ class SAMTrackObject {
         this.type = this.getType(data);
         this.labelId = this.getLabelId(data);
         this.objectId = this.getObjectId(data);
-        this.nonCond = {};
+        this.nonCond = [];
         this.order = [];
     }
 }
@@ -363,7 +355,7 @@ async function execute(
                 onProgress: decoratedOnProgress,
                 cancelled,
             })).entries()) {
-                generatedBatch[bid].object.update(frame, created); // update state
+                generatedBatch[bid].object.update(frame); // update state
 
                 if (created !== null) {
                     await instance.annotations.commit(
