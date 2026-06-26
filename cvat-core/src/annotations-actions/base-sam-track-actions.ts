@@ -377,7 +377,7 @@ async function execute(
         if (cancelled()) {
             return;
         }
-        event.close();
+        await event.close();
     } finally {
         await action.destroy();
     }
