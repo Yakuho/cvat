@@ -10,7 +10,16 @@ services:
     container_name: cvat_redis_sam
     image: redis:7.2-alpine
     restart: always
-    command: redis-server --appendonly yes
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --protected-mode
+      - "no"
+      - --maxmemory-policy
+      - allkeys-lru
     volumes:
       - cvat_redis_sam_data:/data
     environment:
