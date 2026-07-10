@@ -69,7 +69,7 @@ spec:
           value: apt-get update && apt-get -y install curl git python3 python3-pip python-is-python3 ffmpeg libsm6 libxext6 && rm -rf /var/lib/apt/lists/*
         # install sam deps
         - kind: RUN
-          value: pip3 install torch torchvision opencv-python redis cvat-sdk --no-cache-dir
+          value: pip3 install torch torchvision opencv-python redis cvat-sdk pydantic --no-cache-dir
         # install sam code
         - kind: RUN
           value: pip3 install git+https://github.com/facebookresearch/sam2.git --no-cache-dir
