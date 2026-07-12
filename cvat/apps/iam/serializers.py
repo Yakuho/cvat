@@ -7,23 +7,48 @@ from allauth.account import app_settings as allauth_settings
 from allauth.account.adapter import get_adapter
 from allauth.account.utils import filter_users_by_email, setup_user_email
 from dj_rest_auth.registration.serializers import RegisterSerializer
-from dj_rest_auth.serializers import LoginSerializer, PasswordResetSerializer
+from dj_rest_auth.serializers import (
+    LoginSerializer,
+    PasswordChangeSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetSerializer,
+)
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.translation import gettext_lazy as _
-from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from cvat.apps.iam.forms import ResetPasswordFormEx
-from cvat.apps.iam.utils import get_dummy_or_regular_user
+from cvat.apps.iam.password_validation import (
+    DEFAULT_MAX_PASSWORD_LENGTH,
+    DEFAULT_MIN_PASSWORD_LENGTH,
+)
+from cvat.apps.iam.utils import get_dummy_or_regular_user, is_signup_email_required
 
 
 class RegisterSerializerEx(RegisterSerializer):
     # workaround for https://github.com/iMerica/dj-rest-auth/issues/707
     email = serializers.EmailField(
-        required=allauth_settings.EMAIL_REQUIRED, max_length=allauth_settings.EMAIL_MAX_LENGTH
+        required=is_signup_email_required(), max_length=allauth_settings.EMAIL_MAX_LENGTH
+    )
+    # Override the upstream password fields to expose CVAT's explicit password
+    # length contract in the API schema and enforce it at the serializer boundary.
+    password1 = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+        trim_whitespace=False,
+        min_length=DEFAULT_MIN_PASSWORD_LENGTH,
+        max_length=DEFAULT_MAX_PASSWORD_LENGTH,
+    )
+    password2 = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+        trim_whitespace=False,
+        min_length=DEFAULT_MIN_PASSWORD_LENGTH,
+        max_length=DEFAULT_MAX_PASSWORD_LENGTH,
     )
 
     first_name = serializers.CharField(
@@ -107,42 +132,80 @@ class PasswordResetSerializerEx(PasswordResetSerializer):
         return {"domain_override": domain}
 
 
+@extend_schema_serializer(component_name="PasswordResetConfirm")
+class PasswordResetConfirmSerializerEx(PasswordResetConfirmSerializer):
+    # Keep CVAT's password length policy independent from dj-rest-auth defaults.
+    new_password1 = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+        trim_whitespace=False,
+        min_length=DEFAULT_MIN_PASSWORD_LENGTH,
+        max_length=DEFAULT_MAX_PASSWORD_LENGTH,
+    )
+    new_password2 = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+        trim_whitespace=False,
+        min_length=DEFAULT_MIN_PASSWORD_LENGTH,
+        max_length=DEFAULT_MAX_PASSWORD_LENGTH,
+    )
+
+
+@extend_schema_serializer(component_name="PasswordChange")
+class PasswordChangeSerializerEx(PasswordChangeSerializer):
+    # Keep old password uncapped here so existing users are not blocked by serializer limits.
+    old_password = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+        trim_whitespace=False,
+    )
+    # Keep CVAT's password length policy independent from dj-rest-auth defaults.
+    new_password1 = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+        trim_whitespace=False,
+        min_length=DEFAULT_MIN_PASSWORD_LENGTH,
+        max_length=DEFAULT_MAX_PASSWORD_LENGTH,
+    )
+    new_password2 = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+        trim_whitespace=False,
+        min_length=DEFAULT_MIN_PASSWORD_LENGTH,
+        max_length=DEFAULT_MAX_PASSWORD_LENGTH,
+    )
+
+
 class LoginSerializerEx(LoginSerializer):
     def get_auth_user_using_allauth(self, username, email, password):
 
         def is_email_authentication():
-            return (
-                settings.ACCOUNT_AUTHENTICATION_METHOD
-                == allauth_settings.AuthenticationMethod.EMAIL
-            )
+            return allauth_settings.LOGIN_METHODS == {allauth_settings.LoginMethod.EMAIL}
 
         def is_username_authentication():
-            return (
-                settings.ACCOUNT_AUTHENTICATION_METHOD
-                == allauth_settings.AuthenticationMethod.USERNAME
-            )
+            return allauth_settings.LOGIN_METHODS == {allauth_settings.LoginMethod.USERNAME}
 
         # check that the server settings match the request
         if is_username_authentication() and not username and email:
             raise ValidationError(
                 "Attempt to authenticate with email/password. "
                 "But username/password are used for authentication on the server. "
-                "Please check your server configuration ACCOUNT_AUTHENTICATION_METHOD."
+                "Please check your server configuration ACCOUNT_LOGIN_METHODS."
             )
 
         if is_email_authentication() and not email and username:
             raise ValidationError(
                 "Attempt to authenticate with username/password. "
                 "But email/password are used for authentication on the server. "
-                "Please check your server configuration ACCOUNT_AUTHENTICATION_METHOD."
+                "Please check your server configuration ACCOUNT_LOGIN_METHODS."
             )
 
         # Authentication through email
-        if settings.ACCOUNT_AUTHENTICATION_METHOD == allauth_settings.AuthenticationMethod.EMAIL:
+        if is_email_authentication():
             return self._validate_email(email, password)
 
         # Authentication through username
-        if settings.ACCOUNT_AUTHENTICATION_METHOD == allauth_settings.AuthenticationMethod.USERNAME:
+        if is_username_authentication():
             return self._validate_username(username, password)
 
         # Authentication through either username or email

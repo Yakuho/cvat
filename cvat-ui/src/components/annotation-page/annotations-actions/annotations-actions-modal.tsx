@@ -6,9 +6,7 @@ import './styles.scss';
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createStore } from 'redux';
-import {
-    Provider, shallowEqual, useDispatch, useSelector,
-} from 'react-redux';
+import { Provider, useDispatch, useSelector } from 'react-redux';
 import { createRoot } from 'react-dom/client';
 import Button from 'antd/lib/button';
 import { Col, Row } from 'antd/lib/grid';
@@ -20,17 +18,20 @@ import Modal from 'antd/lib/modal';
 import Alert from 'antd/lib/alert';
 import InputNumber from 'antd/lib/input-number';
 import Switch from 'antd/lib/switch';
+import Table from 'antd/lib/table';
+import QuestionCircleOutlined from '@ant-design/icons/lib/icons/QuestionCircleOutlined';
 
 import config from 'config';
-import { createAction, ActionUnion } from 'utils/redux';
+import { createAction, ActionUnion, shallowEqual } from 'utils/redux';
 import { getCVATStore } from 'cvat-store';
 import {
     BaseCollectionAction, BaseAction, Job, getCore,
-    ObjectState, ActionParameterType,
+    ObjectState, ActionParameterType, DimensionType,
 } from 'cvat-core-wrapper';
 import { Canvas } from 'cvat-canvas-wrapper';
 import { fetchAnnotationsAsync } from 'actions/annotation-actions';
 import { clamp } from 'utils/math';
+import CVATTooltip from 'components/common/cvat-tooltip';
 import { FramesRangeSelector } from './components';
 
 const core = getCore();
@@ -243,7 +244,9 @@ const componentStorage = createStore(reducer, {
     targetObjectState: null,
 });
 
-function ActionParameterComponent(props: ActionParameterProps & { onChange: (value: string) => void }): JSX.Element {
+function ActionParameterComponent(props: ActionParameterProps & {
+    onChange: (value: string) => void;
+}): JSX.Element {
     const {
         defaultValue, type, values, onChange,
     } = props;
@@ -279,7 +282,6 @@ function ActionParameterComponent(props: ActionParameterProps & { onChange: (val
             cancelled = true;
         };
     }, []);
-
     useEffect(() => {
         if (!loading) {
             onChange(value);
@@ -369,12 +371,18 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
         actions.filter((_action) => _action.isApplicableForObject(targetObjectState)) : // filter for object action
         actions.filter((_action) => !_action.isApplicableForObjectOnly()); // filter for menu action
     const jobInstance = storage.getState().annotation.job.instance as Job;
+    const is1D = jobInstance.dimension === DimensionType.DIMENSION_1D;
     const currentFrameAction = activeAction instanceof BaseCollectionAction || targetObjectState !== null;
     if (activeAction && !filteredActions.some((a) => a.name === activeAction.name)) {
         dispatch(reducerActions.setActiveAnnotationsAction(filteredActions[0]));
     }
 
     useEffect(() => {
+        if (is1D) {
+            dispatch(reducerActions.setVisible(true));
+            return;
+        }
+
         core.actions.list().then((list: BaseAction[]) => {
             dispatch(reducerActions.setAnnotationsActions(list));
 
@@ -393,7 +401,29 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
             dispatch(reducerActions.updateFrameTo(jobInstance.stopFrame));
             dispatch(reducerActions.updateTargetObjectState(defaultTargetObjectState ?? null));
         });
-    }, []);
+    }, [jobInstance]);
+
+    if (is1D) {
+        return (
+            <Modal
+                closable={false}
+                width={640}
+                open={modalVisible}
+                destroyOnClose
+                afterClose={onClose}
+                className='cvat-action-runner-content'
+                okText='Close'
+                cancelButtonProps={{ style: { display: 'none' } }}
+                onOk={() => dispatch(reducerActions.setVisible(false))}
+            >
+                <Alert
+                    message='Annotation actions are not available for audio jobs'
+                    type='info'
+                    showIcon
+                />
+            </Modal>
+        );
+    }
 
     return (
         <Modal
@@ -573,23 +603,66 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
                                 <hr />
                             </Col>
                             {Object.entries(activeAction.parameters)
-                                .map(([name, { defaultValue, type, values }], idx) => (
-                                    <Col
-                                        key={`${activeAction.name}_${idx}`}
-                                        span={24}
-                                        className='cvat-action-runner-action-parameter'
-                                    >
-                                        <Text>{name}</Text>
-                                        <ActionParameterComponent
-                                            onChange={(value: string) => {
-                                                dispatch(reducerActions.updateActionParameter(name, value));
-                                            }}
-                                            defaultValue={actionParameters[activeAction.name]?.[name] ?? defaultValue}
-                                            type={type}
-                                            values={values}
-                                        />
-                                    </Col>
-                                ))}
+                                .map(([name, {
+                                    defaultValue, type, values, tooltip,
+                                }], idx) => {
+                                    const renderTooltip = (): React.ReactNode | string | null => {
+                                        if (!tooltip) return null;
+
+                                        const { type: tooltipType, content } = tooltip;
+
+                                        if (typeof tooltipType === 'string' && typeof content === 'string') {
+                                            return content;
+                                        }
+
+                                        if (tooltipType === 'table' && typeof content === 'object') {
+                                            return (
+                                                <div className='cvat-annotation-actions-tooltip-table'>
+                                                    <Table
+                                                        rowKey='key'
+                                                        dataSource={content.data}
+                                                        columns={content.columns}
+                                                        size='small'
+                                                        pagination={false}
+                                                    />
+                                                </div>
+                                            );
+                                        }
+
+                                        return null;
+                                    };
+
+                                    return (
+                                        <Col
+                                            key={`${activeAction.name}_${idx}`}
+                                            span={24}
+                                            className='cvat-action-runner-action-parameter'
+                                        >
+                                            {tooltip ? (
+                                                <CVATTooltip
+                                                    title={renderTooltip()}
+                                                    overlayStyle={{ maxWidth: 500 }}
+                                                >
+                                                    <Text>{name}</Text>
+                                                    {' '}
+                                                    <QuestionCircleOutlined />
+                                                </CVATTooltip>
+                                            ) : (
+                                                <Text>{name}</Text>
+                                            )}
+                                            <ActionParameterComponent
+                                                onChange={(value: string) => {
+                                                    dispatch(reducerActions.updateActionParameter(name, value));
+                                                }}
+                                                defaultValue={
+                                                    actionParameters[activeAction.name]?.[name] ?? defaultValue
+                                                }
+                                                type={type}
+                                                values={values}
+                                            />
+                                        </Col>
+                                    );
+                                })}
                         </Row>
                     </Col>
                 ) : null}

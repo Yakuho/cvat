@@ -18,6 +18,7 @@ import {
 
 import { RemoveFilteredShapes } from './remove-filtered-shapes';
 import { PropagateShapes } from './propagate-shapes';
+import { PolySimplify } from './poly-simplify';
 import { SAM2Tracker, SAM2TrackerObject } from './sam2-tracker';
 
 const registeredActions: BaseAction[] = [];
@@ -52,6 +53,7 @@ registerAction(new SAM2Tracker());
 registerAction(new SAM2TrackerObject());
 registerAction(new RemoveFilteredShapes());
 registerAction(new PropagateShapes());
+registerAction(new PolySimplify());
 
 export async function runAction(
     instance: Job | Task,

@@ -211,10 +211,14 @@ export class AutoborderHandlerImpl implements AutoborderHandler {
     }
 
     private replaceCurrentShapePoints(points: number[][]): void {
+        const paintHandler = this.currentShape?.remember('_paintHandler');
+        if (!paintHandler) {
+            return;
+        }
+
         const lastPoint = (this.currentShape as any).array().valueOf().slice(-1)[0];
         (this.currentShape as any).plot([...points, lastPoint]);
 
-        const paintHandler = this.currentShape.remember('_paintHandler');
         paintHandler.drawCircles();
         paintHandler.set.members.forEach((el: SVG.Circle): void => {
             el.attr('stroke-width', 1 / this.scale).attr('r', 2.5 / this.scale);
@@ -406,6 +410,29 @@ export class AutoborderHandlerImpl implements AutoborderHandler {
 
                 if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(width) || Number.isNaN(height)) {
                     return null;
+                }
+
+                const svgElement = shape as unknown as SVGGraphicsElement;
+                const ctm = svgElement.getCTM();
+
+                const localCorners = [
+                    { x, y },
+                    { x: x + width, y },
+                    { x: x + width, y: y + height },
+                    { x, y: y + height },
+                ];
+
+                if (ctm && (ctm.a !== 1 || ctm.b !== 0 || ctm.c !== 0 || ctm.d !== 1)) {
+                    const transformedCorners = localCorners.map((corner) => {
+                        const transformedX = ctm.a * corner.x + ctm.c * corner.y + ctm.e;
+                        const transformedY = ctm.b * corner.x + ctm.d * corner.y + ctm.f;
+                        return [transformedX, transformedY];
+                    });
+
+                    return {
+                        color,
+                        points: transformedCorners,
+                    };
                 }
 
                 points = `${x},${y} ${x + width},${y} ${x + width},${y + height} ${x},${y + height}`;
