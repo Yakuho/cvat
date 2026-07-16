@@ -622,67 +622,74 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
                                 <Text strong>Setup action parameters </Text>
                                 <hr />
                             </Col>
-                            {Object.entries(activeAction.parameters)
-                                .map(([name, {
-                                    defaultValue, type, values, tooltip,
-                                }], idx) => {
-                                    const renderTooltip = (): React.ReactNode | string | null => {
-                                        if (!tooltip) return null;
+                            <Col
+                                span={24}
+                                className='cvat-action-runner-action-parameters-list cvat-scrollbar'
+                            >
+                                <Row>
+                                    {Object.entries(activeAction.parameters)
+                                        .map(([name, {
+                                            defaultValue, type, values, tooltip,
+                                        }], idx) => {
+                                            const renderTooltip = (): React.ReactNode | string | null => {
+                                                if (!tooltip) return null;
 
-                                        const { type: tooltipType, content } = tooltip;
+                                                const { type: tooltipType, content } = tooltip;
 
-                                        if (typeof tooltipType === 'string' && typeof content === 'string') {
-                                            return content;
-                                        }
-
-                                        if (tooltipType === 'table' && typeof content === 'object') {
-                                            return (
-                                                <div className='cvat-annotation-actions-tooltip-table'>
-                                                    <Table
-                                                        rowKey='key'
-                                                        dataSource={content.data}
-                                                        columns={content.columns}
-                                                        size='small'
-                                                        pagination={false}
-                                                    />
-                                                </div>
-                                            );
-                                        }
-
-                                        return null;
-                                    };
-
-                                    return (
-                                        <Col
-                                            key={`${activeAction.name}_${idx}`}
-                                            span={24}
-                                            className='cvat-action-runner-action-parameter'
-                                        >
-                                            {tooltip ? (
-                                                <CVATTooltip
-                                                    title={renderTooltip()}
-                                                    overlayStyle={{ maxWidth: 500 }}
-                                                >
-                                                    <Text>{name}</Text>
-                                                    {' '}
-                                                    <QuestionCircleOutlined />
-                                                </CVATTooltip>
-                                            ) : (
-                                                <Text>{name}</Text>
-                                            )}
-                                            <ActionParameterComponent
-                                                onChange={(value: string) => {
-                                                    dispatch(reducerActions.updateActionParameter(name, value));
-                                                }}
-                                                defaultValue={
-                                                    actionParameters[activeAction.name]?.[name] ?? defaultValue
+                                                if (typeof tooltipType === 'string' && typeof content === 'string') {
+                                                    return content;
                                                 }
-                                                type={type}
-                                                values={values}
-                                            />
-                                        </Col>
-                                    );
-                                })}
+
+                                                if (tooltipType === 'table' && typeof content === 'object') {
+                                                    return (
+                                                        <div className='cvat-annotation-actions-tooltip-table'>
+                                                            <Table
+                                                                rowKey='key'
+                                                                dataSource={content.data}
+                                                                columns={content.columns}
+                                                                size='small'
+                                                                pagination={false}
+                                                            />
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return null;
+                                            };
+
+                                            return (
+                                                <Col
+                                                    key={`${activeAction.name}_${idx}`}
+                                                    span={24}
+                                                    className='cvat-action-runner-action-parameter'
+                                                >
+                                                    {tooltip ? (
+                                                        <CVATTooltip
+                                                            title={renderTooltip()}
+                                                            overlayStyle={{ maxWidth: 500 }}
+                                                        >
+                                                            <Text>{name}</Text>
+                                                            {' '}
+                                                            <QuestionCircleOutlined />
+                                                        </CVATTooltip>
+                                                    ) : (
+                                                        <Text>{name}</Text>
+                                                    )}
+                                                    <ActionParameterComponent
+                                                        onChange={(value: string) => {
+                                                            dispatch(reducerActions.updateActionParameter(name, value));
+                                                        }}
+                                                        defaultValue={
+                                                            actionParameters[activeAction.name]?.[name] ?? defaultValue
+                                                        }
+                                                        type={type}
+                                                        values={values}
+                                                    />
+                                                </Col>
+                                            );
+                                        })}
+                                </Row>
+                            </Col>
                         </Row>
                     </Col>
                 ) : null}

@@ -38,6 +38,12 @@
 }
 
 .cvat-action-runner-action-parameters {
+    .cvat-action-runner-action-parameters-list {
+        max-height: 40vh;
+        padding-right: $grid-unit-size;
+        scrollbar-gutter: stable;
+    }
+
     .cvat-action-runner-action-parameter {
         margin-top: $grid-unit-size;
 
@@ -56,14 +62,18 @@
     text-align: center;
 }
 
-.cvat-approx-threshold-selector {
+.cvat-approx-threshold-selector,
+.cvat-frames-range-selector {
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
+    margin-top: $grid-unit-size;
     padding: $grid-unit-size * 2;
-    border-radius: $border-radius-base;
-    background: $background-color-1;
+    border-radius: 12px;
+    background: #f5f7fa;
+}
 
+.cvat-approx-threshold-selector {
     .cvat-approx-threshold-preview {
         box-sizing: border-box;
         position: relative;
@@ -147,10 +157,6 @@
 }
 
 .cvat-frames-range-selector {
-    background: #f5f7fa;
-    padding: 16px;
-    border-radius: 12px;
-
     &-header {
         display: flex;
         align-items: center;
