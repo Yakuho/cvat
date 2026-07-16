@@ -54,6 +54,13 @@ import { ImageProcessing, BaseImageFilter, SerializedImageFilter } from 'cvat-co
 import AboutData from 'cvat-core/src/about';
 import { MinimalShape, TrackerResults, InteractorResults } from 'cvat-core/src/lambda-manager';
 import { fetchAndAssembleAudio } from 'cvat-core/src/audio';
+import {
+    APPROXIMATION_ACCURACY_STEP,
+    DEFAULT_APPROXIMATION_ACCURACY,
+    MAX_APPROXIMATION_ACCURACY,
+    MIN_APPROXIMATION_ACCURACY,
+    thresholdFromAccuracy,
+} from 'cvat-core/src/opencv/approximation-accuracy';
 
 const cvat: CVATCore = _cvat;
 
@@ -135,6 +142,11 @@ export {
     AboutData,
     BaseImageFilter,
     fetchAndAssembleAudio,
+    APPROXIMATION_ACCURACY_STEP,
+    DEFAULT_APPROXIMATION_ACCURACY,
+    MAX_APPROXIMATION_ACCURACY,
+    MIN_APPROXIMATION_ACCURACY,
+    thresholdFromAccuracy,
 };
 
 export type {

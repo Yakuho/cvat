@@ -52,6 +52,66 @@
     text-align: center;
 }
 
+.cvat-approx-threshold-selector {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    padding: $grid-unit-size * 2;
+    border-radius: $border-radius-base;
+    background: $background-color-1;
+
+    .cvat-approx-threshold-preview {
+        box-sizing: border-box;
+        position: relative;
+        width: 100%;
+        max-width: 100%;
+        min-height: $grid-unit-size * 21;
+        border: 1px solid $border-color-1;
+        border-radius: $border-radius-base;
+        background: white;
+
+        svg {
+            display: block;
+            width: 100%;
+            height: $grid-unit-size * 21;
+        }
+    }
+
+    .cvat-approx-threshold-preview-state {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: $text-color-secondary;
+    }
+
+    .cvat-approx-threshold-original-contour {
+        fill: none;
+        stroke: $text-color-secondary;
+        stroke-width: 1;
+        stroke-dasharray: 3 3;
+        opacity: 0.5;
+    }
+
+    .cvat-approx-threshold-simplified-contour {
+        fill: rgba(24, 144, 255, 0.08);
+        stroke: $slider-color;
+        stroke-width: 2;
+    }
+
+    .cvat-approx-threshold-summary {
+        display: flex;
+        justify-content: space-between;
+        margin-top: $grid-unit-size;
+        color: $text-color-secondary;
+    }
+
+    .ant-slider {
+        margin-bottom: 0;
+    }
+}
+
 .cvat-action-runner-buttons {
     display: flex;
     justify-content: flex-end;

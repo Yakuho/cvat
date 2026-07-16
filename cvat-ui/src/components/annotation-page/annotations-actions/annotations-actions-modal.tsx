@@ -32,7 +32,7 @@ import { Canvas } from 'cvat-canvas-wrapper';
 import { fetchAnnotationsAsync } from 'actions/annotation-actions';
 import { clamp } from 'utils/math';
 import CVATTooltip from 'components/common/cvat-tooltip';
-import { FramesRangeSelector } from './components';
+import { ApproxThresholdSelector, FramesRangeSelector } from './components';
 
 const core = getCore();
 
@@ -326,6 +326,16 @@ function ActionParameterComponent(props: ActionParameterProps & {
                 stopFrame={stopFrame}
                 value={value}
                 onChange={setValue}
+            />
+        );
+    }
+
+    if (type === ActionParameterType.APPROX_THRESHOLD) {
+        return (
+            <ApproxThresholdSelector
+                value={value}
+                onChange={setValue}
+                controlPointsSize={store.getState().settings.workspace.controlPointsSize}
             />
         );
     }

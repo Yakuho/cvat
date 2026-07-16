@@ -11,6 +11,7 @@ export enum ActionParameterType {
     NUMBER = 'number',
     CHECKBOX = 'checkbox',
     FRAMES_RANGE_SELECTOR = 'frames_range_select',
+    APPROX_THRESHOLD = 'approx_threshold',
 }
 
 type ActionParameterValue<T> = T | Promise<T>;
@@ -18,6 +19,7 @@ type ActionParameterValue<T> = T | Promise<T>;
 // For SELECT values should be a list of possible options
 // For NUMBER values should be a list with [min, max, step],
 // or a callback ({ instance }: { instance: Job | Task }) => [min, max, step]
+// For APPROX_THRESHOLD values should be an accuracy range with [min, max, step].
 export type ActionParameters = Record<string, {
     type: ActionParameterType;
     values: string[] | (({ instance }: { instance: Job | Task }) => ActionParameterValue<string[]>);
@@ -56,7 +58,7 @@ export function prepareActionParameters(declared: ActionParameters, defined: obj
         }
 
         const value = Object.hasOwn(defined, name) ? defined[name] : defaultValue;
-        if (type === ActionParameterType.NUMBER) {
+        if ([ActionParameterType.NUMBER, ActionParameterType.APPROX_THRESHOLD].includes(type)) {
             acc[name] = +value;
         } else {
             acc[name] = value as string;

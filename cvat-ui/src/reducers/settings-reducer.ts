@@ -11,6 +11,7 @@ import { AnnotationActionTypes } from 'actions/annotation-actions';
 import {
     SettingsState, GridColor, FrameSpeed, ColorBy,
 } from 'reducers';
+import { DEFAULT_APPROXIMATION_ACCURACY } from 'cvat-core-wrapper';
 
 const defaultState: SettingsState = {
     shapes: {
@@ -38,7 +39,7 @@ const defaultState: SettingsState = {
         showObjectsTextAlways: false,
         showAllInterpolationTracks: false,
         intelligentPolygonCrop: true,
-        defaultApproxPolyAccuracy: 9,
+        defaultApproxPolyAccuracy: DEFAULT_APPROXIMATION_ACCURACY,
         textFontSize: 14,
         controlPointsSize: 5,
         textPosition: 'auto',

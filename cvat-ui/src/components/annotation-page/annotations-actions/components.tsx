@@ -8,6 +8,146 @@ import { Button } from 'antd';
 import InputNumber from 'antd/lib/input-number';
 import Slider from 'antd/lib/slider';
 
+import {
+    APPROXIMATION_ACCURACY_STEP,
+    DEFAULT_APPROXIMATION_ACCURACY,
+    MAX_APPROXIMATION_ACCURACY,
+    MIN_APPROXIMATION_ACCURACY,
+    thresholdFromAccuracy,
+} from 'cvat-core-wrapper';
+import openCVWrapper from 'utils/opencv-wrapper/opencv-wrapper';
+
+const EXAMPLE_SHAPES: [number, number][] = [
+    [28, 105], [31, 93], [36, 82], [43, 72], [51, 65], [60, 60], [70, 57], [80, 56],
+    [90, 57], [100, 60], [110, 64], [120, 68], [130, 69], [140, 67], [149, 61], [157, 52],
+    [165, 39], [173, 28], [180, 24], [187, 29], [194, 43], [201, 61], [208, 77], [216, 88],
+    [225, 94], [235, 96], [245, 94], [255, 89], [265, 80], [274, 71], [282, 68], [289, 73],
+    [294, 84], [296, 98], [294, 111], [288, 122], [279, 130], [268, 135], [256, 137], [244, 136],
+    [232, 132], [220, 126], [208, 121], [196, 118], [184, 117], [172, 119], [160, 124], [148, 131],
+    [136, 138], [124, 141], [112, 138], [101, 131], [91, 122], [81, 114], [71, 109], [61, 108],
+    [51, 112], [42, 117], [34, 116], [29, 111],
+];
+
+function accuracyFromThreshold(threshold: number): number {
+    if (!Number.isFinite(threshold)) {
+        return DEFAULT_APPROXIMATION_ACCURACY;
+    }
+
+    let closestAccuracy = DEFAULT_APPROXIMATION_ACCURACY;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    for (let accuracy = MIN_APPROXIMATION_ACCURACY; accuracy <= MAX_APPROXIMATION_ACCURACY; accuracy++) {
+        const distance = Math.abs(thresholdFromAccuracy(accuracy) - threshold);
+        if (distance < closestDistance) {
+            closestAccuracy = accuracy;
+            closestDistance = distance;
+        }
+    }
+
+    return closestAccuracy;
+}
+
+interface ApproxThresholdSelectorProps {
+    value: string;
+    onChange: (value: string) => void;
+    controlPointsSize: number;
+}
+
+export function ApproxThresholdSelector({
+    value, onChange, controlPointsSize,
+}: ApproxThresholdSelectorProps): JSX.Element {
+    const [accuracy, setAccuracy] = useState(() => accuracyFromThreshold(Number(value)));
+    const [previewPoints, setPreviewPoints] = useState<[number, number][]>([]);
+    const [previewLoading, setPreviewLoading] = useState(true);
+    const [previewAvailable, setPreviewAvailable] = useState(true);
+
+    useEffect(() => {
+        setAccuracy(accuracyFromThreshold(Number(value)));
+    }, [value]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setPreviewLoading(true);
+
+        const updatePreview = async (): Promise<void> => {
+            try {
+                if (!openCVWrapper.isInitialized) {
+                    await openCVWrapper.initialize(() => {});
+                }
+
+                const points = openCVWrapper.contours.approxPoly(
+                    EXAMPLE_SHAPES,
+                    thresholdFromAccuracy(accuracy),
+                    true,
+                );
+                if (!cancelled) {
+                    setPreviewPoints(points);
+                    setPreviewAvailable(true);
+                }
+            } catch (_error) {
+                if (!cancelled) {
+                    setPreviewAvailable(false);
+                }
+            } finally {
+                if (!cancelled) {
+                    setPreviewLoading(false);
+                }
+            }
+        };
+
+        void updatePreview();
+
+        return () => { cancelled = true; };
+    }, [accuracy]);
+
+    const originalPolygon = EXAMPLE_SHAPES.map((point) => point.join(',')).join(' ');
+    const simplifiedPolygon = previewPoints.map((point) => point.join(',')).join(' ');
+
+    return (
+        <div className='cvat-approx-threshold-selector'>
+            <div className='cvat-approx-threshold-preview'>
+                {previewLoading && <span className='cvat-approx-threshold-preview-state'>Loading preview...</span>}
+                {!previewLoading && !previewAvailable && (
+                    <span className='cvat-approx-threshold-preview-state'>Preview unavailable</span>
+                )}
+                {!previewLoading && previewAvailable && (
+                    <svg viewBox='0 0 324 164' role='img' aria-label='Polygon approximation preview'>
+                        <polygon className='cvat-approx-threshold-original-contour' points={originalPolygon} />
+                        <polygon className='cvat-approx-threshold-simplified-contour' points={simplifiedPolygon} />
+                        {previewPoints.map(([x, y], index) => (
+                            <circle
+                                key={index}
+                                cx={x}
+                                cy={y}
+                                r={controlPointsSize}
+                                fill='white'
+                                stroke='black'
+                            />
+                        ))}
+                    </svg>
+                )}
+            </div>
+            <div className='cvat-approx-threshold-summary'>
+                <span>Example points</span>
+                <span className='cvat-approx-threshold-point-count'>
+                    {previewAvailable && !previewLoading ? `${previewPoints.length} points` : '— points'}
+                </span>
+            </div>
+            <Slider
+                min={MIN_APPROXIMATION_ACCURACY}
+                max={MAX_APPROXIMATION_ACCURACY}
+                step={APPROXIMATION_ACCURACY_STEP}
+                value={accuracy}
+                dots
+                tooltip={{ open: false }}
+                onChange={(updatedAccuracy: number) => {
+                    setAccuracy(updatedAccuracy);
+                    onChange(String(thresholdFromAccuracy(updatedAccuracy)));
+                }}
+            />
+        </div>
+    );
+}
+
 interface FramesRangeSelectorProps {
     value: string;
     onChange: (value: string) => void;

@@ -58,9 +58,10 @@ def handler(context: Context, event: Event):
 
     jobId = event.body["jobId"]
     items = event.body["batch"]
-    threshold = event.body.get("threshold", 0.8)
+    threshold = event.body.get("threshold")
+    approx_threshold = event.body.get("approx_threshold")
 
     with Profile(device=context.user_data.model.device) as profile:
-        results = list(context.user_data.model.handle(jobId, items, threshold=threshold))
+        results = list(context.user_data.model.handle(jobId, items, threshold, approx_threshold))
     context.logger.info("CVAT SAM2.1 AutoTrack called done, elapsed %d ms" % (profile.dt * 1e3))
     return context.Response(body=json.dumps(results), headers={}, content_type="application/json", status_code=200)

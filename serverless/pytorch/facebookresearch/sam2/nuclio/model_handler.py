@@ -30,6 +30,10 @@ REDIS_EX_OBJ_PTR           = 300
 REDIS_EX_MEMORY_OUTS       = 300
 REDIS_EX_IMAGE_FEATS       = 600
 
+# Reference:
+#   Default Value: https://github.com/cvat-ai/cvat/blob/develop/cvat-ui/src/reducers/settings-reducer.ts#L41
+#   Threshold Achieve: https://github.com/cvat-ai/cvat/blob/develop/cvat-core/src/opencv/opencv-interface.ts#L213
+APPROX_THRESHOLD = float(os.environ.get("APPROX_THRESHOLD", 1.428571))  # (2.75*(13-9)-1)/7=1.428571
 THRESHOLD = float(os.environ.get("THRESHOLD", 0.6))
 BATCHSIZE = int(os.environ.get("BATCHSIZE", 1))
 
@@ -694,7 +698,14 @@ class ModelHandler:
                 # confidence, mask_tensor(Batch, 1, 256, 256), origin_img_size(h, w), state
                 yield ious[bn].squeeze(-1), l_res_masks[bn: bn + 1], images_feats_cache[state.frame].imgsz, state
 
-    def handle(self, jobId: int, items: list[TrackState], threshold=THRESHOLD, batch_size=BATCHSIZE):
+    def handle(
+        self,
+        jobId: int,
+        items: list[TrackState],
+        threshold: float = THRESHOLD,
+        approx_threshold: float = APPROX_THRESHOLD,
+        batch_size=BATCHSIZE
+    ):
         items = list(map(TrackState.model_validate, items))
         for confidence, mask_tensor, img_size, state in self._batch_step(jobId, items, batch_size):
             if confidence < threshold:
@@ -710,7 +721,9 @@ class ModelHandler:
 
             if state.type == "polygon":
                 contours, hierarchy = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-                points = contours[int(np.argmax([cv2.contourArea(c) for c in contours]))].reshape(-1).tolist()
+                points = contours[int(np.argmax([cv2.contourArea(c) for c in contours]))]
+                points = cv2.approxPolyDP(points, approx_threshold, True)
+                points = points.reshape(-1).tolist()
                 yield {"confidence": float(confidence), "labelId": state.labelId, "points": points, "type": state.type}
             if state.type == "mask":
                 coords = np.where(mask > 0)

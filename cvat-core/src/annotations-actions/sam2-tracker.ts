@@ -10,16 +10,25 @@ import { ShapeType, ModelKind, Source } from '../enums';
 import ObjectState from '../object-state';
 import LambdaManager from '../lambda-manager';
 import MLModel from '../ml-model';
+import {
+    APPROXIMATION_ACCURACY_STEP,
+    DEFAULT_APPROXIMATION_ACCURACY,
+    MAX_APPROXIMATION_ACCURACY,
+    MIN_APPROXIMATION_ACCURACY,
+    thresholdFromAccuracy,
+} from '../opencv/approximation-accuracy';
 
 const MODEL_PARAMETER = 'Deployed Model';
 const THRESHOLD_PARAMETER = 'Threshold';
 const FRAME_RANGE_PARAMETER = 'Frame Range Setting Panel for Object Tracking';
+const APPROX_THRESHOLD_PARAMETER = 'Approximation accuracy';
 
 export class SAM2Tracker extends BaseSAMTrackAction {
     protected readonly supportShapeTypes = [ShapeType.POLYGON, ShapeType.MASK];
 
     private session: Job;
     private threshold: number;
+    private approxThreshold: number;
     private model: MLModel;
 
     private static async getSAM2TrackerModels(): Promise<MLModel[]> {
@@ -38,6 +47,7 @@ export class SAM2Tracker extends BaseSAMTrackAction {
 
         // Extra parameters
         this.threshold = Number(parameters[THRESHOLD_PARAMETER]);
+        this.approxThreshold = Number(parameters[APPROX_THRESHOLD_PARAMETER]);
 
         const modelName = String(parameters[MODEL_PARAMETER] ?? '');
         const models = await SAM2Tracker.getSAM2TrackerModels();
@@ -63,7 +73,13 @@ export class SAM2Tracker extends BaseSAMTrackAction {
     public async run(input: SAMTrackActionInput): Promise<SAMTrackActionOutput> {
         const { batch } = input;
 
-        const payload = { jobId: this.session.id, threshold: this.threshold, batch };
+        const payload = {
+            jobId: this.session.id,
+            threshold: this.threshold,
+            approx_threshold: this.approxThreshold,
+            batch,
+        };
+
         const results = await LambdaManager.call(this.session.taskId, this.model, payload);
 
         if (!Array.isArray(results)) {
@@ -79,7 +95,7 @@ export class SAM2Tracker extends BaseSAMTrackAction {
         }
 
         return results.map((result, idx) => {
-            const item = batch[idx]; // TODO: 需要根据 ObjectId 做对齐对比
+            const item = batch[idx];
 
             if (result === null) {
                 return { frame: item.frame, created: null, confidence: 0.0 };
@@ -140,6 +156,15 @@ export class SAM2Tracker extends BaseSAMTrackAction {
                 type: ActionParameterType.SELECT,
                 values: async () => (await SAM2Tracker.getSAM2TrackerModels()).map((model: MLModel) => model.name),
                 defaultValue: SAM2Tracker.getDefaultModelName,
+            },
+            [APPROX_THRESHOLD_PARAMETER]: {
+                type: ActionParameterType.APPROX_THRESHOLD,
+                values: [
+                    MIN_APPROXIMATION_ACCURACY,
+                    MAX_APPROXIMATION_ACCURACY,
+                    APPROXIMATION_ACCURACY_STEP,
+                ].map(String),
+                defaultValue: String(thresholdFromAccuracy(DEFAULT_APPROXIMATION_ACCURACY)),
             },
         };
     }
