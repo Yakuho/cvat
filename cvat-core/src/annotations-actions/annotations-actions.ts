@@ -24,7 +24,8 @@ import { SAM2Tracker, SAM2TrackerObject } from './sam2-tracker';
 const registeredActions: BaseAction[] = [];
 
 export async function listActions(): Promise<typeof registeredActions> {
-    return [...registeredActions];
+    const sam2TrackerAvailable = await SAM2Tracker.isAvailable().catch(() => false);
+    return registeredActions.filter((action) => !(action instanceof SAM2Tracker) || sam2TrackerAvailable);
 }
 
 export async function registerAction(action: BaseAction): Promise<void> {

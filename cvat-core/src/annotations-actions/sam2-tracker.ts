@@ -42,6 +42,10 @@ export class SAM2Tracker extends BaseSAMTrackAction {
         return models[0].name;
     }
 
+    public static async isAvailable(): Promise<boolean> {
+        return (await SAM2Tracker.getSAM2TrackerModels()).length > 0;
+    }
+
     public async init(sessionInstance: Job, parameters: Record<string, string | number>): Promise<void> {
         this.session = sessionInstance;
 
