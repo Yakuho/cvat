@@ -45,6 +45,10 @@
             margin-right: $grid-unit-size;
         }
     }
+
+    .cvat-action-runner-select-parameter {
+        min-width: $grid-unit-size * 20;
+    }
 }
 
 .cvat-action-runner-progress-message {

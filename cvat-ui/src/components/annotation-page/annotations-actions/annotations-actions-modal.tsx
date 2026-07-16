@@ -290,7 +290,13 @@ function ActionParameterComponent(props: ActionParameterProps & {
 
     if (loading) {
         if (type === ActionParameterType.SELECT) {
-            return <Select value={value} loading disabled />;
+            return (
+                <Select
+                    className='cvat-action-runner-select-parameter'
+                    value={value}
+                    loading disabled
+                />
+            );
         }
 
         return <InputNumber value={+value} disabled />;
@@ -298,7 +304,11 @@ function ActionParameterComponent(props: ActionParameterProps & {
 
     if (type === ActionParameterType.SELECT) {
         return (
-            <Select value={value} onChange={setValue}>
+            <Select
+                className='cvat-action-runner-select-parameter'
+                value={value}
+                onChange={setValue}
+            >
                 {computedValues.map((_value: string) => (
                     <Select.Option key={_value} value={_value}>{_value}</Select.Option>
                 ))}
