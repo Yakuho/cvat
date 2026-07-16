@@ -26,7 +26,7 @@ import { createAction, ActionUnion, shallowEqual } from 'utils/redux';
 import { getCVATStore } from 'cvat-store';
 import {
     BaseCollectionAction, BaseAction, Job, getCore,
-    ObjectState, ActionParameterType, DimensionType,
+    ObjectState, ActionParameterType, DimensionType, ShapeType,
 } from 'cvat-core-wrapper';
 import { Canvas } from 'cvat-canvas-wrapper';
 import { fetchAnnotationsAsync } from 'actions/annotation-actions';
@@ -386,11 +386,15 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
         actions, activeAction, fetching, targetObjectState, cancelled,
         progress, progressMessage, frameFrom, frameTo, actionParameters, modalVisible,
     } = useSelector((state: State) => ({ ...state }), shallowEqual);
+    const [hasPolygonAnnotations, setHasPolygonAnnotations] = useState(false);
 
     const filteredActions = targetObjectState ?
         actions.filter((_action) => _action.isApplicableForObject(targetObjectState)) : // filter for object action
         actions.filter((_action) => !_action.isApplicableForObjectOnly()); // filter for menu action
     const jobInstance = storage.getState().annotation.job.instance as Job;
+    const effectiveTargetObjectState = targetObjectState ?? defaultTargetObjectState ?? null;
+    const shouldRenderApproxThreshold = effectiveTargetObjectState ?
+        effectiveTargetObjectState.shapeType === ShapeType.POLYGON : hasPolygonAnnotations;
     const is1D = jobInstance.dimension === DimensionType.DIMENSION_1D;
     const currentFrameAction = activeAction instanceof BaseCollectionAction || targetObjectState !== null;
     if (activeAction && !filteredActions.some((a) => a.name === activeAction.name)) {
@@ -422,6 +426,30 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
             dispatch(reducerActions.updateTargetObjectState(defaultTargetObjectState ?? null));
         });
     }, [jobInstance]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (effectiveTargetObjectState) {
+            return () => { cancelled = true; };
+        }
+
+        setHasPolygonAnnotations(false);
+        jobInstance.annotations.export().then((collection) => {
+            if (!cancelled) {
+                setHasPolygonAnnotations(
+                    collection.shapes.some((shape) => shape.type === ShapeType.POLYGON) ||
+                    collection.tracks.some((track) => track.shapes.some((shape) => shape.type === ShapeType.POLYGON)),
+                );
+            }
+        }).catch(() => {
+            if (!cancelled) {
+                setHasPolygonAnnotations(false);
+            }
+        });
+
+        return () => { cancelled = true; };
+    }, [jobInstance, effectiveTargetObjectState]);
 
     if (is1D) {
         return (
@@ -628,6 +656,10 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
                             >
                                 <Row>
                                     {Object.entries(activeAction.parameters)
+                                        .filter(([, { type }]) => (
+                                            type !== ActionParameterType.APPROX_THRESHOLD ||
+                                            shouldRenderApproxThreshold
+                                        ))
                                         .map(([name, {
                                             defaultValue, type, values, tooltip,
                                         }], idx) => {
