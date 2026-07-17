@@ -720,7 +720,7 @@ class ModelHandler:
                 continue
 
             if state.type == "polygon":
-                contours, hierarchy = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
                 points = contours[int(np.argmax([cv2.contourArea(c) for c in contours]))]
                 points = cv2.approxPolyDP(points, approx_threshold, True)
                 points = points.reshape(-1).tolist()
