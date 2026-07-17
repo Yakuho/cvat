@@ -604,6 +604,9 @@ class LambdaFunction:
                     ],
                 }
             )
+            approx_threshold = data.get("approx_threshold")
+            if approx_threshold is not None:
+                payload["approx_threshold"] = approx_threshold
         else:
             raise ValidationError(
                 "`{}` lambda function has incorrect type: {}".format(self.id, self.kind),
