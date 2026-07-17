@@ -725,7 +725,7 @@ class ModelHandler:
                 points = cv2.approxPolyDP(points, approx_threshold, True)
                 points = points.reshape(-1).tolist()
                 yield {"confidence": float(confidence), "labelId": state.labelId, "points": points, "type": state.type}
-            if state.type == "mask":
+            elif state.type == "mask":
                 coords = np.where(mask > 0)
                 y0, x0 = coords[0].min(), coords[1].min()
                 y1, x1 = coords[0].max(), coords[1].max()
