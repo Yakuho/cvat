@@ -193,16 +193,15 @@ export function FramesRangeSelector({
             return !Number.isNaN(num) ? num : null;
         }).filter((v): v is number => v !== null);
 
-        if (parts.length === 2) {
-            const normalizedRange = normalizeFrameRange([
+        const normalizedRange = parts.length === 2 ?
+            normalizeFrameRange([
                 Math.max(Math.min(parts[0], parts[1]), startFrame),
                 Math.min(Math.max(parts[0], parts[1]), stopFrame),
-            ]);
+            ]) : normalizeFrameRange([startFrame, stopFrame]);
 
-            setFrameRange(normalizedRange);
-            if (formatFrameRange(normalizedRange) !== value) {
-                onChange(formatFrameRange(normalizedRange));
-            }
+        setFrameRange(normalizedRange);
+        if (formatFrameRange(normalizedRange) !== value) {
+            onChange(formatFrameRange(normalizedRange));
         }
     }, [value, startFrame, stopFrame, frameNumber]);
 

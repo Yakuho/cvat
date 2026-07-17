@@ -213,7 +213,7 @@ class SAMTrackObject {
     }
 
     get length(): number {
-        return (this.frameTo - this.frameFrom) - this.removeFrameIds.length -
+        return (this.frameTo - this.frameFrom + 1) - this.removeFrameIds.length -
             Object.keys({ ...this.cond }).length - this.nonCond.length;
     }
 
@@ -316,7 +316,7 @@ async function execute(
 
         const batchSize = -1; // TODO: Maybe read from SAMFunction spec. -1 for all
         const removeFrameIds: Array<number> = (await Promise.all(
-            Array.from({ length: action.frameTo - action.frameFrom }, (_, i) => action.frameFrom + i)
+            Array.from({ length: action.frameTo - action.frameFrom + 1 }, (_, i) => action.frameFrom + i)
                 .map(async (frame) => {
                     const frameData = await Object.getPrototypeOf(instance).frames
                         .get.implementation.call(instance, frame);
