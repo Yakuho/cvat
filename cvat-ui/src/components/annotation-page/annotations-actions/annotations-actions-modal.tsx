@@ -662,7 +662,7 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
                                         ))
                                         .map(([name, {
                                             defaultValue, type, values, tooltip,
-                                        }], idx) => {
+                                        }]) => {
                                             const renderTooltip = (): React.ReactNode | string | null => {
                                                 if (!tooltip) return null;
 
@@ -691,7 +691,7 @@ function AnnotationsActionsModalContent(props: Props): JSX.Element {
 
                                             return (
                                                 <Col
-                                                    key={`${activeAction.name}_${idx}`}
+                                                    key={`${activeAction.name}_${name}`}
                                                     span={24}
                                                     className='cvat-action-runner-action-parameter'
                                                 >

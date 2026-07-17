@@ -407,7 +407,7 @@ export async function run(
                 tracks: exportedCollection.tracks,
             });
 
-            const annotationsFilter = new AnnotationsFilter();
+            const annotationsFilter = new AnnotationsFilter(null);
             const filteredClientIDs = annotationsFilter.filterSerializedCollection({
                 tags: [],
                 shapes: filteredByAction.shapes,
