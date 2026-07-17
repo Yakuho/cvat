@@ -27,7 +27,7 @@ spec:
       value:
     # ---------- Redis Cache ----------
     - name: REDIS_HOST
-      value: "cvat_redis_sam"
+      value: "cvat-redis-sam"
     - name: REDIS_PORT
       value: "6379"
     - name: REDIS_PASSWORD
@@ -53,6 +53,8 @@ spec:
           value: http_proxy=
         - kind: ENV
           value: https_proxy=
+        - kind: ENV
+          value: no_proxy=cvat-server,cvat-redis-sam
         # set NVIDIA container runtime settings
         - kind: ENV
           value: NVIDIA_VISIBLE_DEVICES=all

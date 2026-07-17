@@ -26,7 +26,9 @@ services:
       - REDIS_DATABASES=1
       - REDIS_PASSWORD=
     networks:
-      - cvat
+      cvat:
+        aliases:
+          - cvat-redis-sam
 
 volumes:
   cvat_redis_sam_data:
