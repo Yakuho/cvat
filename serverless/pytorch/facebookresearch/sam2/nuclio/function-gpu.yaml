@@ -45,7 +45,7 @@ spec:
       value: "1"
     # ---------------------------------
   build:
-    image: cvat.pt.facebookresearch.sam2.1.large:latest-gpu
+    image: cvat.pth.facebookresearch.sam2.1.large:latest-gpu
     directives:
       preCopy:
         # set proxy
