@@ -32,11 +32,19 @@ export interface AudioState {
         intervals: AudioIntervalState[];
         activeIntervalID: number | null;
         hoveredIntervalID: number | null;
-        audioUrl: string | null;
+        contextMenu: {
+            top: number;
+            left: number;
+            clientID: number | null;
+        };
+        audioDataToken: string | null;
         audioLoading: boolean;
         audioError: string | null;
         waveformReady: boolean;
         activeLabelId: number | null;
+        audioLoadRequest: object | null;
+        seekRequest: { time: number } | null;
+        playIntervalOnceRequest: { intervalID: number } | null;
     };
 }
 
@@ -424,6 +432,20 @@ export interface PluginsState {
                 items: PluginComponent[];
             };
         }
+        taskPage: {
+            details: {
+                topBar: {
+                    extras: PluginComponent[];
+                };
+            };
+        };
+        projectPage: {
+            details: {
+                topBar: {
+                    extras: PluginComponent[];
+                };
+            };
+        };
         modelsPage: {
             topBar: {
                 items: PluginComponent[];
@@ -946,6 +968,7 @@ export interface AnnotationState {
             min: number;
             max: number;
             cur: number;
+            hiddenByFrame: Map<number, Set<number>>;
         };
     };
     remove: {

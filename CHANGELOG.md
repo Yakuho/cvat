@@ -16,6 +16,281 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-2.73.0'></a>
+## \[2.73.0\] - 2026-08-12
+
+### Added
+
+- \[CLI\] New `--file` option on `cvat-cli profile create` that reads the
+  PAT from a plain-text file or from the JSON envelope
+  (<https://github.com/cvat-ai/cvat/pull/10896>)
+
+- Added webhooks for async requests
+  (<https://github.com/cvat-ai/cvat/pull/10897>)
+
+- \[Server API\] Added a `changes` field to update webhook payloads
+  (<https://github.com/cvat-ai/cvat/pull/10897>)
+
+- \[Server API\] `GET /api/webhooks/events` now returns objects with `key` and
+  `group.display_name` instead of plain event key strings
+  (<https://github.com/cvat-ai/cvat/pull/10897>)
+
+- Added a new button on the Waveform to quickly navigate to the current playback position.
+  (<https://github.com/cvat-ai/cvat/pull/10965>)
+
+- Added outlines to interactor mask previews to make mask boundaries easier to distinguish.
+  (<https://github.com/cvat-ai/cvat/pull/10966>)
+
+- Added local undo and redo for brush, eraser, and polygon actions while drawing
+  or editing masks.
+  (<https://github.com/cvat-ai/cvat/pull/10984>)
+
+- Added timeline to the audio canvas waveform minimap
+  (<https://github.com/cvat-ai/cvat/pull/11010>)
+
+### Changed
+
+- Dataset and annotation import error messages now include the underlying
+  reason (e.g. the missing file or the invalid annotation value) instead of
+  only a generic "Failed to import dataset" text
+  (<https://github.com/cvat-ai/cvat/pull/10946>)
+
+- Updated the audio interval creation UX to always switch to "Cursor" mode and
+  automatically make the newly added interval active
+  (<https://github.com/cvat-ai/cvat/pull/11013>)
+
+### Removed
+
+- \[Server API\] Removed the unusable `delete:organization` webhook event
+  (<https://github.com/cvat-ai/cvat/pull/10897>)
+
+- \[Server API\] The `create:export` and `create:backup` webhook events
+  were renamed to `completed:request[export:{dataset,annotations,backup}]`.
+  The existing clients must be updated for compatibility.
+  (<https://github.com/cvat-ai/cvat/pull/10897>)
+
+### Fixed
+
+- Task creation from a cloud storage video with a manifest failed with
+  `InvalidManifestError` when a directory was selected or `filename_pattern`
+  was used, because the video manifest was parsed as an image manifest
+  (<https://github.com/cvat-ai/cvat/pull/10916>)
+
+- Fixed raw label editor action states and prevented label values from briefly
+  reverting while changes are saved or reset. Also made the label type dropdown
+  wide enough to display complete option names.
+  (<https://github.com/cvat-ai/cvat/pull/10952>)
+
+- Help link on the task creation page ("Connected file share" tab) now opens in a
+  new tab, preventing loss of in-progress form data
+  (<https://github.com/cvat-ai/cvat/pull/10969>)
+
+- Fixed audio playback and waveform synchronization in the audio annotation workspace
+  (<https://github.com/cvat-ai/cvat/pull/10980>)
+
+- Fixed saving annotations after expanding/moving an interval to the end of the track
+  (<https://github.com/cvat-ai/cvat/pull/10948>)
+
+- Removed audio annotation option from workspace selector for non-audio jobs
+  (<https://github.com/cvat-ai/cvat/pull/10965>)
+
+- Fixed scroll jumping to waveform playback cursor when resizing the window
+  (<https://github.com/cvat-ai/cvat/pull/10995>)
+
+- Fixed duplicate accounts from mixed-case invitation emails.
+  (<https://github.com/cvat-ai/cvat/pull/10997>)
+
+- Unexpected task creation failures with the message
+  `Task.DoesNotExist: Task matching query does not exist`
+  (<https://github.com/cvat-ai/cvat/pull/11003>)
+
+- Persistent `429 Too Many Requests` API errors on chunk retrieval for jobs
+  with honeypots after partial honeypot updates
+  (<https://github.com/cvat-ai/cvat/pull/11007>)
+
+<a id='changelog-2.72.0'></a>
+## \[2.72.0\] - 2026-07-29
+
+### Added
+
+- \[CLI\] New `cvat-cli profile` commands to list, create, set the default,
+  and delete saved Personal Access Token profiles.
+  (<https://github.com/cvat-ai/cvat/pull/10875>)
+
+### Changed
+
+- In the backend server image, CVAT source files are now installed in
+  `/opt/cvat` rather than `/home/django`, and owned by root
+  (<https://github.com/cvat-ai/cvat/pull/10575>)
+
+### Removed
+
+- Backend processes no longer write their logs to `logs/cvat_server.log`
+  (<https://github.com/cvat-ai/cvat/pull/10939>)
+
+### Fixed
+
+- Fixed mask bounding box not shrinking after removing underlying pixels
+  when another mask overlaps it with the "Remove underlying pixels" option enabled
+  (<https://github.com/cvat-ai/cvat/pull/10873>)
+
+- Fixed save annotations failure due to “spec_id is invalid” error
+  (<https://github.com/cvat-ai/cvat/pull/10936>)
+
+- Improved audio waveform timeline detail at larger zoom levels
+  (<https://github.com/cvat-ai/cvat/pull/10947>)
+
+- Fixed the caret jumping to the end while editing audio interval text attributes. (<https://github.com/cvat-ai/cvat/pull/10950>)
+- Fixed standard undo/redo shortcuts in the editor of audio interval text attributes.  (<https://github.com/cvat-ai/cvat/pull/10950>)
+
+- Fixed misaligned resize handles for selected audio intervals.
+  (<https://github.com/cvat-ai/cvat/pull/10951>)
+
+- \[Helm\] Fixed backup/export workers using ephemeral storage for backup
+  temporary files.
+  (<https://github.com/cvat-ai/cvat/pull/10958>)
+
+### Security
+
+- Fixed overly lax authorization rules for lambda function requests;
+  viewing a request now requires access to its target task or job,
+  while cancelling a request requires being the user who initiated it
+  (<https://github.com/cvat-ai/cvat/security/advisories/GHSA-m7p7-6w4m-886p>)
+
+- Prevented users from blocking automatic annotation for inaccessible tasks
+  (<https://github.com/cvat-ai/cvat/security/advisories/GHSA-7xhx-3q27-xvcx>)
+
+<a id='changelog-2.71.0'></a>
+## \[2.71.0\] - 2026-07-22
+
+### Added
+
+- \[CLI\] New `--profile NAME` option selects a saved server/credential profile.
+  Replaces `--server-host`/`--server-port`/`--auth` (<https://github.com/cvat-ai/cvat/pull/10845>)
+
+- \[CLI\] New `cvat-cli config default-server` command prints, sets, or clears the default server URL.
+  (<https://github.com/cvat-ai/cvat/pull/10845>)
+
+- \[SDK, CLI\] Added an interface and agent support for interaction
+  auto-annotation functions
+  (<https://github.com/cvat-ai/cvat/pull/10874>)
+
+### Changed
+
+- CVAT will now refuse to start if `keys/secret_key.py` contains arbitrary
+  code
+  (<https://github.com/cvat-ai/cvat/pull/10670>)
+
+- \[CLI\] `--auth` no longer defaults to the OS user; absent auth/profile/token, it uses profile credentials or prompts.
+  `--server-host` falls back to profile/default server/`http://localhost` (<https://github.com/cvat-ai/cvat/pull/10845>)
+
+- Change skeleton control points display to be visually distinguishable from the annotation points
+  (<https://github.com/cvat-ai/cvat/pull/10879>)
+
+### Fixed
+
+- \[SDK, CLI\] Changed the default server URL from `http://localhost:8080` to
+  `http://localhost`, fixed server URL construction when `--server-port` is used
+  with the default server, and report a clear error if a server URL already
+  contains a port
+  (<https://github.com/cvat-ai/cvat/pull/10895>)
+
+- \[Server API\] Prevented `/api/requests` from failing while cleaning up
+  abandoned jobs
+  (<https://github.com/cvat-ai/cvat/pull/10904>)
+
+- Reduced misleading event log entries for webhook delivery failures by recording
+  an exception only after all retries are exhausted, and shortened the connection
+  timeout for unreachable webhook consumers
+  (<https://github.com/cvat-ai/cvat/pull/10921>)
+
+<a id='changelog-2.70.0'></a>
+## \[2.70.0\] - 2026-07-13
+
+### Added
+
+- Added region of interest support for automatic annotation detector and interactor functions
+  (<https://github.com/cvat-ai/cvat/pull/10794>)
+
+- \[SDK\] `list()` methods on high-level proxy classes now accept filter parameters
+  via a composable `F` field DSL and keyword lookups,
+  which are compiled into the server-side `filter` query parameter automatically
+  (<https://github.com/cvat-ai/cvat/pull/10778>)
+
+- \[SDK\] Persistent authentication support with saved profiles:
+  `make_client_from_profile`, `make_client_from_cli`, and
+  `resolve_server_host` helpers let SDK users save server + credential profiles
+  to disk and instantiate a `Client` from a profile name without re-entering
+  credentials
+  (<https://github.com/cvat-ai/cvat/pull/10824>)
+
+- Added confirmation dialog when leaving annotation guide editor with unsaved changes
+  (<https://github.com/cvat-ai/cvat/pull/10884>)
+
+### Removed
+
+- \[SDK, CLI\] Removed server schema autodetection, previously deprecated
+  in v2.36.0
+  (<https://github.com/cvat-ai/cvat/pull/10673>)
+
+- Removed the unused `PATCH /api/invitations/{key}` Server API operation.
+  (<https://github.com/cvat-ai/cvat/pull/10850>)
+
+### Fixed
+
+- Requests API no longer returns a `null` status when a job's status cannot be
+  read from Redis (e.g. the job expired) (<https://github.com/cvat-ai/cvat/pull/10849>)
+
+- Fix snap to contour crashes when drawing stops (drawCircles of undefined / array of null)
+  (<https://github.com/cvat-ai/cvat/pull/10848>)
+
+- Fixed task creation from images hosted on Azure Blob Storage when
+  at least one image's header doesn't fit into 2047 bytes
+  (<https://github.com/cvat-ai/cvat/pull/10851>)
+
+- Requesting task metadata (`GET /api/tasks/<id>/data/meta`) before any
+  data was uploaded to the task now returns 400 with a clear message.
+  (<https://github.com/cvat-ai/cvat/pull/10855>)
+
+- Client error `Cannot read properties of undefined (reading 'occluded')` while copying masks
+  (<https://github.com/cvat-ai/cvat/pull/10853>)
+
+- \[Server API\] Added missing input validation for the `source` field of annotations
+  in the `/api/tasks/<id>/annotations` and `/api/jobs/<id>/annotations` endpoints.
+  The existing invalid values are returned unmodified in the server responses.
+  (<https://github.com/cvat-ai/cvat/pull/10521>)
+
+- Fixed AI tools tracking when starting tracking from multiple drawn rectangles
+  (<https://github.com/cvat-ai/cvat/pull/10860>)
+
+- Client error thrown
+  when listing lambda functions failed (e.g. network
+  error or timeout) (<https://github.com/cvat-ai/cvat/pull/10857>)
+
+- Fix pagination being reset when refreshing or going "back" to a resources page
+  (<https://github.com/cvat-ai/cvat/pull/10858>)
+
+- Make loading previews on project/job cards clickable to allow opening the resource regardless of the preview state
+  (<https://github.com/cvat-ai/cvat/pull/10859>)
+
+- Prevent requests cards content overflow
+  (<https://github.com/cvat-ai/cvat/pull/10862>)
+
+- Improved performance of annotation responses.
+  (<https://github.com/cvat-ai/cvat/pull/10867>)
+
+- Made duration display consistent across the audio annotation editor. (<https://github.com/cvat-ai/cvat/pull/10871>)
+- Right-clicking an audio interval opens the custom context menu instead of the standard browser context menu. (<https://github.com/cvat-ai/cvat/pull/10871>)
+
+- The 500 error (`EnumType.__call__() missing 1 required positional argument: 'value'`)
+  when opening an RQ job details in the `/django-rq/` admin panel
+  (<https://github.com/cvat-ai/cvat/pull/10890>)
+
+### Security
+
+- Fixed an XSS vulnerability related to annotation guides in audio tasks
+  (<https://github.com/cvat-ai/cvat/security/advisories/GHSA-chxx-45vm-qhc9>)
+
 <a id='changelog-2.69.0'></a>
 ## \[2.69.0\] - 2026-06-22
 
