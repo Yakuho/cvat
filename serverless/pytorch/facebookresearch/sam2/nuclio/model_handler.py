@@ -736,6 +736,3 @@ class ModelHandler:
                 yield {"confidence": float(confidence), "labelId": state.labelId, "points": points, "type": state.type}
             else:
                 raise NotImplementedError("type %s not support SAM2.1 AutoTrack." % state.type)
-
-
-            yield {"confidence": float(conf), "labelId": info["labelId"], "points": points, "type": info["type"]}
