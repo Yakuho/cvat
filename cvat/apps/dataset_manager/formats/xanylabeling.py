@@ -7,9 +7,9 @@ import os
 import json
 import cv2
 import numpy as np
+import shutil
 
 from pathlib import Path
-from pyunpack import Archive
 from cvat.apps.dataset_manager.util import make_zip_archive
 from cvat.apps.dataset_manager.formats.cvat import dump_media_files
 from cvat.apps.dataset_manager.bindings import TaskData
@@ -217,7 +217,7 @@ class XAnyLabelingImporter(XAnyLabelingBase):
 
     def __call__(self, src_file, temp_dir: str, instance_data: TaskData, load_data_callback=None, **kwargs):
         # mask2poly = kwargs.get("conv_mask_to_poly", False)
-        Archive(src_file.name).extractall(temp_dir)
+        shutil.unpack_archive(src_file.name, temp_dir, "zip")
         dataset = Dataset(temp_dir)
         # dataset = MaskToPolygonTransformation.convert_dataset(dataset, **kwargs)
         # if load_data_callback is not None:
